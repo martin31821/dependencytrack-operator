@@ -24,10 +24,6 @@ import (
 type TeamSpec struct {
 	// Name of the team to create
 	Name string `json:"name,omitempty"`
-
-	// UUID to use, specify to ensure stable UUIDs of teams across multiple environments/deploys.
-	// If not specified, a random UUID will be generated and used.
-	UUID string `json:"uuid,omitempty"`
 }
 
 // TeamStatus defines the observed state of Team.

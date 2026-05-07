@@ -119,10 +119,8 @@ func (r *TeamReconciler) reconcileUpsert(ctx context.Context, team *dependencytr
 	}
 
 	if dtUUID == "" {
-		// Create the team. Use the UUID from spec for stable identities across environments.
 		createTeam := dtapi.Team{
 			Name: team.Spec.Name,
-			Uuid: team.Spec.UUID,
 		}
 		created, _, err := apiClient.TeamAPI.CreateTeam(authCtx).Team(createTeam).Execute()
 		if err != nil {
