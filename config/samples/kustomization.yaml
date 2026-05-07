@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- dependencytrack_v1alpha1_team.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

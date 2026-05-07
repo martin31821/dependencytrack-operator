@@ -1,0 +1,9 @@
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Team
+metadata:
+  labels:
+    app.kubernetes.io/name: deptrack-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: team-sample
+spec:
+  # TODO(user): Add fields here
