@@ -20,4 +20,13 @@ resources:
   kind: Team
   path: github.com/martin31821/dependencytrack-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: mko.dev
+  group: dependencytrack
+  kind: APIKey
+  path: github.com/martin31821/dependencytrack-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

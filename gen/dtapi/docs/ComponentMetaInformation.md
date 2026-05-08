@@ -6,8 +6,8 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **IntegrityMatchStatus** | Pointer to **string** |  | [optional] 
 **IntegrityRepoUrl** | Pointer to **string** |  | [optional] 
-**LastFetched** | Pointer to **time.Time** |  | [optional] 
-**PublishedDate** | Pointer to **time.Time** |  | [optional] 
+**LastFetched** | Pointer to **util.DTTime** |  | [optional] 
+**PublishedDate** | Pointer to **util.DTTime** |  | [optional] 
 
 ## Methods
 
@@ -80,20 +80,20 @@ HasIntegrityRepoUrl returns a boolean if a field has been set.
 
 ### GetLastFetched
 
-`func (o *ComponentMetaInformation) GetLastFetched() time.Time`
+`func (o *ComponentMetaInformation) GetLastFetched() util.DTTime`
 
 GetLastFetched returns the LastFetched field if non-nil, zero value otherwise.
 
 ### GetLastFetchedOk
 
-`func (o *ComponentMetaInformation) GetLastFetchedOk() (*time.Time, bool)`
+`func (o *ComponentMetaInformation) GetLastFetchedOk() (*util.DTTime, bool)`
 
 GetLastFetchedOk returns a tuple with the LastFetched field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetLastFetched
 
-`func (o *ComponentMetaInformation) SetLastFetched(v time.Time)`
+`func (o *ComponentMetaInformation) SetLastFetched(v util.DTTime)`
 
 SetLastFetched sets LastFetched field to given value.
 
@@ -105,20 +105,20 @@ HasLastFetched returns a boolean if a field has been set.
 
 ### GetPublishedDate
 
-`func (o *ComponentMetaInformation) GetPublishedDate() time.Time`
+`func (o *ComponentMetaInformation) GetPublishedDate() util.DTTime`
 
 GetPublishedDate returns the PublishedDate field if non-nil, zero value otherwise.
 
 ### GetPublishedDateOk
 
-`func (o *ComponentMetaInformation) GetPublishedDateOk() (*time.Time, bool)`
+`func (o *ComponentMetaInformation) GetPublishedDateOk() (*util.DTTime, bool)`
 
 GetPublishedDateOk returns a tuple with the PublishedDate field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetPublishedDate
 
-`func (o *ComponentMetaInformation) SetPublishedDate(v time.Time)`
+`func (o *ComponentMetaInformation) SetPublishedDate(v util.DTTime)`
 
 SetPublishedDate sets PublishedDate field to given value.
 

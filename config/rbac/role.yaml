@@ -9,6 +9,8 @@ rules:
   resources:
   - secrets
   verbs:
+  - create
+  - delete
   - get
   - list
   - patch
@@ -16,6 +18,7 @@ rules:
 - apiGroups:
   - dependencytrack.mko.dev
   resources:
+  - apikeys
   - teams
   verbs:
   - create
@@ -28,12 +31,14 @@ rules:
 - apiGroups:
   - dependencytrack.mko.dev
   resources:
+  - apikeys/finalizers
   - teams/finalizers
   verbs:
   - update
 - apiGroups:
   - dependencytrack.mko.dev
   resources:
+  - apikeys/status
   - teams/status
   verbs:
   - get

@@ -12,7 +12,8 @@ package dtapi
 
 import (
 	"encoding/json"
-	"time"
+
+	"github.com/martin31821/dependencytrack-operator/gen/util"
 )
 
 // checks if the ComponentOccurrence type satisfies the MappedNullable interface at compile time
@@ -20,12 +21,12 @@ var _ MappedNullable = &ComponentOccurrence{}
 
 // ComponentOccurrence struct for ComponentOccurrence
 type ComponentOccurrence struct {
-	CreatedAt *time.Time `json:"createdAt,omitempty"`
-	Id        *string    `json:"id,omitempty"`
-	Line      *int32     `json:"line,omitempty"`
-	Location  *string    `json:"location,omitempty"`
-	Offset    *int32     `json:"offset,omitempty"`
-	Symbol    *string    `json:"symbol,omitempty"`
+	CreatedAt *util.DTTime `json:"createdAt,omitempty"`
+	Id        *string      `json:"id,omitempty"`
+	Line      *int32       `json:"line,omitempty"`
+	Location  *string      `json:"location,omitempty"`
+	Offset    *int32       `json:"offset,omitempty"`
+	Symbol    *string      `json:"symbol,omitempty"`
 }
 
 // NewComponentOccurrence instantiates a new ComponentOccurrence object
@@ -46,9 +47,9 @@ func NewComponentOccurrenceWithDefaults() *ComponentOccurrence {
 }
 
 // GetCreatedAt returns the CreatedAt field value if set, zero value otherwise.
-func (o *ComponentOccurrence) GetCreatedAt() time.Time {
+func (o *ComponentOccurrence) GetCreatedAt() util.DTTime {
 	if o == nil || IsNil(o.CreatedAt) {
-		var ret time.Time
+		var ret util.DTTime
 		return ret
 	}
 	return *o.CreatedAt
@@ -56,7 +57,7 @@ func (o *ComponentOccurrence) GetCreatedAt() time.Time {
 
 // GetCreatedAtOk returns a tuple with the CreatedAt field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *ComponentOccurrence) GetCreatedAtOk() (*time.Time, bool) {
+func (o *ComponentOccurrence) GetCreatedAtOk() (*util.DTTime, bool) {
 	if o == nil || IsNil(o.CreatedAt) {
 		return nil, false
 	}
@@ -72,8 +73,8 @@ func (o *ComponentOccurrence) HasCreatedAt() bool {
 	return false
 }
 
-// SetCreatedAt gets a reference to the given time.Time and assigns it to the CreatedAt field.
-func (o *ComponentOccurrence) SetCreatedAt(v time.Time) {
+// SetCreatedAt gets a reference to the given util.DTTime and assigns it to the CreatedAt field.
+func (o *ComponentOccurrence) SetCreatedAt(v util.DTTime) {
 	o.CreatedAt = &v
 }
 

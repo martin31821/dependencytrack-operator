@@ -12,7 +12,8 @@ package dtapi
 
 import (
 	"encoding/json"
-	"time"
+
+	"github.com/martin31821/dependencytrack-operator/gen/util"
 )
 
 // checks if the ApiKey type satisfies the MappedNullable interface at compile time
@@ -20,13 +21,13 @@ var _ MappedNullable = &ApiKey{}
 
 // ApiKey struct for ApiKey
 type ApiKey struct {
-	Comment   *string    `json:"comment,omitempty"`
-	Created   *time.Time `json:"created,omitempty"`
-	Key       *string    `json:"key,omitempty"`
-	LastUsed  *time.Time `json:"lastUsed,omitempty"`
-	Legacy    *bool      `json:"legacy,omitempty"`
-	MaskedKey *string    `json:"maskedKey,omitempty"`
-	PublicId  *string    `json:"publicId,omitempty"`
+	Comment   *string      `json:"comment,omitempty"`
+	Created   *util.DTTime `json:"created,omitempty"`
+	Key       *string      `json:"key,omitempty"`
+	LastUsed  *util.DTTime `json:"lastUsed,omitempty"`
+	Legacy    *bool        `json:"legacy,omitempty"`
+	MaskedKey *string      `json:"maskedKey,omitempty"`
+	PublicId  *string      `json:"publicId,omitempty"`
 }
 
 // NewApiKey instantiates a new ApiKey object
@@ -79,9 +80,9 @@ func (o *ApiKey) SetComment(v string) {
 }
 
 // GetCreated returns the Created field value if set, zero value otherwise.
-func (o *ApiKey) GetCreated() time.Time {
+func (o *ApiKey) GetCreated() util.DTTime {
 	if o == nil || IsNil(o.Created) {
-		var ret time.Time
+		var ret util.DTTime
 		return ret
 	}
 	return *o.Created
@@ -89,7 +90,7 @@ func (o *ApiKey) GetCreated() time.Time {
 
 // GetCreatedOk returns a tuple with the Created field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *ApiKey) GetCreatedOk() (*time.Time, bool) {
+func (o *ApiKey) GetCreatedOk() (*util.DTTime, bool) {
 	if o == nil || IsNil(o.Created) {
 		return nil, false
 	}
@@ -105,8 +106,8 @@ func (o *ApiKey) HasCreated() bool {
 	return false
 }
 
-// SetCreated gets a reference to the given time.Time and assigns it to the Created field.
-func (o *ApiKey) SetCreated(v time.Time) {
+// SetCreated gets a reference to the given util.DTTime and assigns it to the Created field.
+func (o *ApiKey) SetCreated(v util.DTTime) {
 	o.Created = &v
 }
 
@@ -143,9 +144,9 @@ func (o *ApiKey) SetKey(v string) {
 }
 
 // GetLastUsed returns the LastUsed field value if set, zero value otherwise.
-func (o *ApiKey) GetLastUsed() time.Time {
+func (o *ApiKey) GetLastUsed() util.DTTime {
 	if o == nil || IsNil(o.LastUsed) {
-		var ret time.Time
+		var ret util.DTTime
 		return ret
 	}
 	return *o.LastUsed
@@ -153,7 +154,7 @@ func (o *ApiKey) GetLastUsed() time.Time {
 
 // GetLastUsedOk returns a tuple with the LastUsed field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *ApiKey) GetLastUsedOk() (*time.Time, bool) {
+func (o *ApiKey) GetLastUsedOk() (*util.DTTime, bool) {
 	if o == nil || IsNil(o.LastUsed) {
 		return nil, false
 	}
@@ -169,8 +170,8 @@ func (o *ApiKey) HasLastUsed() bool {
 	return false
 }
 
-// SetLastUsed gets a reference to the given time.Time and assigns it to the LastUsed field.
-func (o *ApiKey) SetLastUsed(v time.Time) {
+// SetLastUsed gets a reference to the given util.DTTime and assigns it to the LastUsed field.
+func (o *ApiKey) SetLastUsed(v util.DTTime) {
 	o.LastUsed = &v
 }
 

@@ -12,7 +12,8 @@ package dtapi
 
 import (
 	"encoding/json"
-	"time"
+
+	"github.com/martin31821/dependencytrack-operator/gen/util"
 )
 
 // checks if the ComponentMetaInformation type satisfies the MappedNullable interface at compile time
@@ -20,10 +21,10 @@ var _ MappedNullable = &ComponentMetaInformation{}
 
 // ComponentMetaInformation struct for ComponentMetaInformation
 type ComponentMetaInformation struct {
-	IntegrityMatchStatus *string    `json:"integrityMatchStatus,omitempty"`
-	IntegrityRepoUrl     *string    `json:"integrityRepoUrl,omitempty"`
-	LastFetched          *time.Time `json:"lastFetched,omitempty"`
-	PublishedDate        *time.Time `json:"publishedDate,omitempty"`
+	IntegrityMatchStatus *string      `json:"integrityMatchStatus,omitempty"`
+	IntegrityRepoUrl     *string      `json:"integrityRepoUrl,omitempty"`
+	LastFetched          *util.DTTime `json:"lastFetched,omitempty"`
+	PublishedDate        *util.DTTime `json:"publishedDate,omitempty"`
 }
 
 // NewComponentMetaInformation instantiates a new ComponentMetaInformation object
@@ -108,9 +109,9 @@ func (o *ComponentMetaInformation) SetIntegrityRepoUrl(v string) {
 }
 
 // GetLastFetched returns the LastFetched field value if set, zero value otherwise.
-func (o *ComponentMetaInformation) GetLastFetched() time.Time {
+func (o *ComponentMetaInformation) GetLastFetched() util.DTTime {
 	if o == nil || IsNil(o.LastFetched) {
-		var ret time.Time
+		var ret util.DTTime
 		return ret
 	}
 	return *o.LastFetched
@@ -118,7 +119,7 @@ func (o *ComponentMetaInformation) GetLastFetched() time.Time {
 
 // GetLastFetchedOk returns a tuple with the LastFetched field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *ComponentMetaInformation) GetLastFetchedOk() (*time.Time, bool) {
+func (o *ComponentMetaInformation) GetLastFetchedOk() (*util.DTTime, bool) {
 	if o == nil || IsNil(o.LastFetched) {
 		return nil, false
 	}
@@ -134,15 +135,15 @@ func (o *ComponentMetaInformation) HasLastFetched() bool {
 	return false
 }
 
-// SetLastFetched gets a reference to the given time.Time and assigns it to the LastFetched field.
-func (o *ComponentMetaInformation) SetLastFetched(v time.Time) {
+// SetLastFetched gets a reference to the given util.DTTime and assigns it to the LastFetched field.
+func (o *ComponentMetaInformation) SetLastFetched(v util.DTTime) {
 	o.LastFetched = &v
 }
 
 // GetPublishedDate returns the PublishedDate field value if set, zero value otherwise.
-func (o *ComponentMetaInformation) GetPublishedDate() time.Time {
+func (o *ComponentMetaInformation) GetPublishedDate() util.DTTime {
 	if o == nil || IsNil(o.PublishedDate) {
-		var ret time.Time
+		var ret util.DTTime
 		return ret
 	}
 	return *o.PublishedDate
@@ -150,7 +151,7 @@ func (o *ComponentMetaInformation) GetPublishedDate() time.Time {
 
 // GetPublishedDateOk returns a tuple with the PublishedDate field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *ComponentMetaInformation) GetPublishedDateOk() (*time.Time, bool) {
+func (o *ComponentMetaInformation) GetPublishedDateOk() (*util.DTTime, bool) {
 	if o == nil || IsNil(o.PublishedDate) {
 		return nil, false
 	}
@@ -166,8 +167,8 @@ func (o *ComponentMetaInformation) HasPublishedDate() bool {
 	return false
 }
 
-// SetPublishedDate gets a reference to the given time.Time and assigns it to the PublishedDate field.
-func (o *ComponentMetaInformation) SetPublishedDate(v time.Time) {
+// SetPublishedDate gets a reference to the given util.DTTime and assigns it to the PublishedDate field.
+func (o *ComponentMetaInformation) SetPublishedDate(v util.DTTime) {
 	o.PublishedDate = &v
 }
 

@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/dependencytrack.mko.dev_teams.yaml
+- bases/dependencytrack.mko.dev_apikeys.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

@@ -15,7 +15,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"time"
+
+	"github.com/martin31821/dependencytrack-operator/gen/util"
 )
 
 // PtrBool is a helper routine that returns a pointer to given boolean value.
@@ -40,7 +41,7 @@ func PtrFloat64(v float64) *float64 { return &v }
 func PtrString(v string) *string { return &v }
 
 // PtrTime is helper routine that returns a pointer to given Time value.
-func PtrTime(v time.Time) *time.Time { return &v }
+func PtrTime(v util.DTTime) *util.DTTime { return &v }
 
 type NullableBool struct {
 	value *bool
@@ -295,15 +296,15 @@ func (v *NullableString) UnmarshalJSON(src []byte) error {
 }
 
 type NullableTime struct {
-	value *time.Time
+	value *util.DTTime
 	isSet bool
 }
 
-func (v NullableTime) Get() *time.Time {
+func (v NullableTime) Get() *util.DTTime {
 	return v.value
 }
 
-func (v *NullableTime) Set(val *time.Time) {
+func (v *NullableTime) Set(val *util.DTTime) {
 	v.value = val
 	v.isSet = true
 }
@@ -317,7 +318,7 @@ func (v *NullableTime) Unset() {
 	v.isSet = false
 }
 
-func NewNullableTime(val *time.Time) *NullableTime {
+func NewNullableTime(val *util.DTTime) *NullableTime {
 	return &NullableTime{value: val, isSet: true}
 }
 

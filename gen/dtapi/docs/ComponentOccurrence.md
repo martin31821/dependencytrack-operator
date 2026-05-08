@@ -4,7 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**CreatedAt** | Pointer to **time.Time** |  | [optional] 
+**CreatedAt** | Pointer to **util.DTTime** |  | [optional] 
 **Id** | Pointer to **string** |  | [optional] 
 **Line** | Pointer to **int32** |  | [optional] 
 **Location** | Pointer to **string** |  | [optional] 
@@ -32,20 +32,20 @@ but it doesn't guarantee that properties required by API are set
 
 ### GetCreatedAt
 
-`func (o *ComponentOccurrence) GetCreatedAt() time.Time`
+`func (o *ComponentOccurrence) GetCreatedAt() util.DTTime`
 
 GetCreatedAt returns the CreatedAt field if non-nil, zero value otherwise.
 
 ### GetCreatedAtOk
 
-`func (o *ComponentOccurrence) GetCreatedAtOk() (*time.Time, bool)`
+`func (o *ComponentOccurrence) GetCreatedAtOk() (*util.DTTime, bool)`
 
 GetCreatedAtOk returns a tuple with the CreatedAt field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetCreatedAt
 
-`func (o *ComponentOccurrence) SetCreatedAt(v time.Time)`
+`func (o *ComponentOccurrence) SetCreatedAt(v util.DTTime)`
 
 SetCreatedAt sets CreatedAt field to given value.
 

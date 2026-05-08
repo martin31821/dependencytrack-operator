@@ -10,6 +10,11 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - description: APIKey is the Schema for the apikeys API.
+      displayName: APIKey
+      kind: APIKey
+      name: apikeys.dependencytrack.mko.dev
+      version: v1alpha1
     - description: Team is the Schema for the teams API.
       displayName: Team
       kind: Team

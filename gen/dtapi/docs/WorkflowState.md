@@ -6,11 +6,11 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **FailureReason** | Pointer to **string** |  | [optional] 
 **Parent** | Pointer to [**WorkflowState**](WorkflowState.md) |  | [optional] 
-**StartedAt** | Pointer to **time.Time** |  | [optional] 
+**StartedAt** | Pointer to **util.DTTime** |  | [optional] 
 **Status** | **string** |  | 
 **Step** | **string** |  | 
 **Token** | **string** |  | 
-**UpdatedAt** | Pointer to **time.Time** |  | [optional] 
+**UpdatedAt** | Pointer to **util.DTTime** |  | [optional] 
 
 ## Methods
 
@@ -83,20 +83,20 @@ HasParent returns a boolean if a field has been set.
 
 ### GetStartedAt
 
-`func (o *WorkflowState) GetStartedAt() time.Time`
+`func (o *WorkflowState) GetStartedAt() util.DTTime`
 
 GetStartedAt returns the StartedAt field if non-nil, zero value otherwise.
 
 ### GetStartedAtOk
 
-`func (o *WorkflowState) GetStartedAtOk() (*time.Time, bool)`
+`func (o *WorkflowState) GetStartedAtOk() (*util.DTTime, bool)`
 
 GetStartedAtOk returns a tuple with the StartedAt field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetStartedAt
 
-`func (o *WorkflowState) SetStartedAt(v time.Time)`
+`func (o *WorkflowState) SetStartedAt(v util.DTTime)`
 
 SetStartedAt sets StartedAt field to given value.
 
@@ -168,20 +168,20 @@ SetToken sets Token field to given value.
 
 ### GetUpdatedAt
 
-`func (o *WorkflowState) GetUpdatedAt() time.Time`
+`func (o *WorkflowState) GetUpdatedAt() util.DTTime`
 
 GetUpdatedAt returns the UpdatedAt field if non-nil, zero value otherwise.
 
 ### GetUpdatedAtOk
 
-`func (o *WorkflowState) GetUpdatedAtOk() (*time.Time, bool)`
+`func (o *WorkflowState) GetUpdatedAtOk() (*util.DTTime, bool)`
 
 GetUpdatedAtOk returns a tuple with the UpdatedAt field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetUpdatedAt
 
-`func (o *WorkflowState) SetUpdatedAt(v time.Time)`
+`func (o *WorkflowState) SetUpdatedAt(v util.DTTime)`
 
 SetUpdatedAt sets UpdatedAt field to given value.
 

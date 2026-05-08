@@ -8,7 +8,7 @@ Name | Type | Description | Notes
 **Email** | Pointer to **string** |  | [optional] 
 **ForcePasswordChange** | Pointer to **bool** |  | [optional] 
 **Fullname** | Pointer to **string** |  | [optional] 
-**LastPasswordChange** | **time.Time** |  | 
+**LastPasswordChange** | **util.DTTime** |  | 
 **NewPassword** | Pointer to **string** |  | [optional] 
 **NonExpiryPassword** | Pointer to **bool** |  | [optional] 
 **Permissions** | Pointer to [**[]Permission**](Permission.md) |  | [optional] 
@@ -20,7 +20,7 @@ Name | Type | Description | Notes
 
 ### NewManagedUser
 
-`func NewManagedUser(lastPasswordChange time.Time, username string, ) *ManagedUser`
+`func NewManagedUser(lastPasswordChange util.DTTime, username string, ) *ManagedUser`
 
 NewManagedUser instantiates a new ManagedUser object
 This constructor will assign default values to properties that have it defined,
@@ -137,20 +137,20 @@ HasFullname returns a boolean if a field has been set.
 
 ### GetLastPasswordChange
 
-`func (o *ManagedUser) GetLastPasswordChange() time.Time`
+`func (o *ManagedUser) GetLastPasswordChange() util.DTTime`
 
 GetLastPasswordChange returns the LastPasswordChange field if non-nil, zero value otherwise.
 
 ### GetLastPasswordChangeOk
 
-`func (o *ManagedUser) GetLastPasswordChangeOk() (*time.Time, bool)`
+`func (o *ManagedUser) GetLastPasswordChangeOk() (*util.DTTime, bool)`
 
 GetLastPasswordChangeOk returns a tuple with the LastPasswordChange field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetLastPasswordChange
 
-`func (o *ManagedUser) SetLastPasswordChange(v time.Time)`
+`func (o *ManagedUser) SetLastPasswordChange(v util.DTTime)`
 
 SetLastPasswordChange sets LastPasswordChange field to given value.
 

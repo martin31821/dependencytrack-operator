@@ -14,7 +14,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"time"
+
+	"github.com/martin31821/dependencytrack-operator/gen/util"
 )
 
 // checks if the ManagedUser type satisfies the MappedNullable interface at compile time
@@ -26,7 +27,7 @@ type ManagedUser struct {
 	Email               *string      `json:"email,omitempty" validate:"regexp=[\\\\P{Cc}]+"`
 	ForcePasswordChange *bool        `json:"forcePasswordChange,omitempty"`
 	Fullname            *string      `json:"fullname,omitempty" validate:"regexp=[\\\\P{Cc}]+"`
-	LastPasswordChange  time.Time    `json:"lastPasswordChange"`
+	LastPasswordChange  util.DTTime  `json:"lastPasswordChange"`
 	NewPassword         *string      `json:"newPassword,omitempty"`
 	NonExpiryPassword   *bool        `json:"nonExpiryPassword,omitempty"`
 	Permissions         []Permission `json:"permissions,omitempty"`
@@ -41,7 +42,7 @@ type _ManagedUser ManagedUser
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewManagedUser(lastPasswordChange time.Time, username string) *ManagedUser {
+func NewManagedUser(lastPasswordChange util.DTTime, username string) *ManagedUser {
 	this := ManagedUser{}
 	this.LastPasswordChange = lastPasswordChange
 	this.Username = username
@@ -185,9 +186,9 @@ func (o *ManagedUser) SetFullname(v string) {
 }
 
 // GetLastPasswordChange returns the LastPasswordChange field value
-func (o *ManagedUser) GetLastPasswordChange() time.Time {
+func (o *ManagedUser) GetLastPasswordChange() util.DTTime {
 	if o == nil {
-		var ret time.Time
+		var ret util.DTTime
 		return ret
 	}
 
@@ -196,7 +197,7 @@ func (o *ManagedUser) GetLastPasswordChange() time.Time {
 
 // GetLastPasswordChangeOk returns a tuple with the LastPasswordChange field value
 // and a boolean to check if the value has been set.
-func (o *ManagedUser) GetLastPasswordChangeOk() (*time.Time, bool) {
+func (o *ManagedUser) GetLastPasswordChangeOk() (*util.DTTime, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -204,7 +205,7 @@ func (o *ManagedUser) GetLastPasswordChangeOk() (*time.Time, bool) {
 }
 
 // SetLastPasswordChange sets field value
-func (o *ManagedUser) SetLastPasswordChange(v time.Time) {
+func (o *ManagedUser) SetLastPasswordChange(v util.DTTime) {
 	o.LastPasswordChange = v
 }
 

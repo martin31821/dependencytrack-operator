@@ -14,7 +14,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"time"
+
+	"github.com/martin31821/dependencytrack-operator/gen/util"
 )
 
 // checks if the WorkflowState type satisfies the MappedNullable interface at compile time
@@ -24,11 +25,11 @@ var _ MappedNullable = &WorkflowState{}
 type WorkflowState struct {
 	FailureReason *string        `json:"failureReason,omitempty"`
 	Parent        *WorkflowState `json:"parent,omitempty"`
-	StartedAt     *time.Time     `json:"startedAt,omitempty"`
+	StartedAt     *util.DTTime   `json:"startedAt,omitempty"`
 	Status        string         `json:"status"`
 	Step          string         `json:"step"`
 	Token         string         `json:"token"`
-	UpdatedAt     *time.Time     `json:"updatedAt,omitempty"`
+	UpdatedAt     *util.DTTime   `json:"updatedAt,omitempty"`
 }
 
 type _WorkflowState WorkflowState
@@ -118,9 +119,9 @@ func (o *WorkflowState) SetParent(v WorkflowState) {
 }
 
 // GetStartedAt returns the StartedAt field value if set, zero value otherwise.
-func (o *WorkflowState) GetStartedAt() time.Time {
+func (o *WorkflowState) GetStartedAt() util.DTTime {
 	if o == nil || IsNil(o.StartedAt) {
-		var ret time.Time
+		var ret util.DTTime
 		return ret
 	}
 	return *o.StartedAt
@@ -128,7 +129,7 @@ func (o *WorkflowState) GetStartedAt() time.Time {
 
 // GetStartedAtOk returns a tuple with the StartedAt field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *WorkflowState) GetStartedAtOk() (*time.Time, bool) {
+func (o *WorkflowState) GetStartedAtOk() (*util.DTTime, bool) {
 	if o == nil || IsNil(o.StartedAt) {
 		return nil, false
 	}
@@ -144,8 +145,8 @@ func (o *WorkflowState) HasStartedAt() bool {
 	return false
 }
 
-// SetStartedAt gets a reference to the given time.Time and assigns it to the StartedAt field.
-func (o *WorkflowState) SetStartedAt(v time.Time) {
+// SetStartedAt gets a reference to the given util.DTTime and assigns it to the StartedAt field.
+func (o *WorkflowState) SetStartedAt(v util.DTTime) {
 	o.StartedAt = &v
 }
 
@@ -222,9 +223,9 @@ func (o *WorkflowState) SetToken(v string) {
 }
 
 // GetUpdatedAt returns the UpdatedAt field value if set, zero value otherwise.
-func (o *WorkflowState) GetUpdatedAt() time.Time {
+func (o *WorkflowState) GetUpdatedAt() util.DTTime {
 	if o == nil || IsNil(o.UpdatedAt) {
-		var ret time.Time
+		var ret util.DTTime
 		return ret
 	}
 	return *o.UpdatedAt
@@ -232,7 +233,7 @@ func (o *WorkflowState) GetUpdatedAt() time.Time {
 
 // GetUpdatedAtOk returns a tuple with the UpdatedAt field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *WorkflowState) GetUpdatedAtOk() (*time.Time, bool) {
+func (o *WorkflowState) GetUpdatedAtOk() (*util.DTTime, bool) {
 	if o == nil || IsNil(o.UpdatedAt) {
 		return nil, false
 	}
@@ -248,8 +249,8 @@ func (o *WorkflowState) HasUpdatedAt() bool {
 	return false
 }
 
-// SetUpdatedAt gets a reference to the given time.Time and assigns it to the UpdatedAt field.
-func (o *WorkflowState) SetUpdatedAt(v time.Time) {
+// SetUpdatedAt gets a reference to the given util.DTTime and assigns it to the UpdatedAt field.
+func (o *WorkflowState) SetUpdatedAt(v util.DTTime) {
 	o.UpdatedAt = &v
 }
 
