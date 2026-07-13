@@ -24,6 +24,8 @@ import (
 	"os"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -35,10 +37,10 @@ const (
 	secretKeyUsername    = "username"
 	secretKeyPassword    = "password"
 	secretKeyPasswordNew = "password-new"
-	minPasswordLength    = 10
+	minPasswordLength    = 30
 )
 
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;update;patch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;create;update;patch
 
 // PasswordRotationRunnable checks and rotates the DependencyTrack admin
 // password stored in a Kubernetes Secret. It runs once per leader election.
@@ -61,8 +63,20 @@ func (r *PasswordRotationRunnable) Start(ctx context.Context) error {
 
 	secret := &corev1.Secret{}
 	if err := r.Client.Get(ctx, types.NamespacedName{Namespace: r.Namespace, Name: secretName}, secret); err != nil {
-		log.Error(err, "failed to read credentials secret", "secret", secretName)
-		return nil
+		if !errors.IsNotFound(err) {
+			log.Error(err, "failed to read credentials secret", "secret", secretName)
+			return nil
+		}
+		log.Info("credentials secret not found, creating with default admin:admin")
+		if err := r.createDefaultSecret(ctx, secretName); err != nil {
+			log.Error(err, "failed to create credentials secret")
+			return nil
+		}
+		// Re-read after creation so the rest of the flow sees the new secret.
+		if err := r.Client.Get(ctx, types.NamespacedName{Namespace: r.Namespace, Name: secretName}, secret); err != nil {
+			log.Error(err, "failed to read credentials secret after creation", "secret", secretName)
+			return nil
+		}
 	}
 
 	username := string(secret.Data[secretKeyUsername])
@@ -151,10 +165,35 @@ func (r *PasswordRotationRunnable) finalizeSecret(ctx context.Context, secret *c
 // generatePassword returns a cryptographically random URL-safe string
 // long enough to satisfy the minimum length requirement.
 func generatePassword() (string, error) {
-	// 18 random bytes → 24 base64 chars, well above minPasswordLength.
-	b := make([]byte, 18)
+	// base64 encoding expands 3 bytes → 4 chars, so ceil(minPasswordLength * 3 / 4)
+	// bytes gives us at least minPasswordLength encoded chars.
+	n := (minPasswordLength*3 + 3) / 4
+	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+// createDefaultSecret creates a credentials secret with admin:admin
+// so the operator can bootstrap a connection to a fresh DependencyTrack
+// instance. The password-rotation logic will then upgrade the password.
+func (r *PasswordRotationRunnable) createDefaultSecret(ctx context.Context, name string) error {
+	log := logf.FromContext(ctx).WithName("password-rotation")
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: r.Namespace,
+		},
+		Data: map[string][]byte{
+			secretKeyUsername: []byte("admin"),
+			secretKeyPassword: []byte("admin"),
+		},
+	}
+	if err := r.Client.Create(ctx, secret); err != nil {
+		return fmt.Errorf("create credentials secret: %w", err)
+	}
+	log.Info("created credentials secret with default admin:admin")
+	return nil
 }
