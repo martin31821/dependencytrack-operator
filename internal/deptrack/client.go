@@ -19,10 +19,12 @@ package deptrack
 import "github.com/martin31821/dependencytrack-operator/gen/dtapi"
 
 // NewAPIClient returns a DependencyTrack API client pointed at baseURL.
+// The baseURL should not include a trailing /api — this function appends it
+// because the OpenAPI codegen default server URLs all end with /api.
 func NewAPIClient(baseURL string) *dtapi.APIClient {
 	cfg := dtapi.NewConfiguration()
 	cfg.Servers = dtapi.ServerConfigurations{
-		{URL: baseURL},
+		{URL: baseURL + "/api"},
 	}
 	return dtapi.NewAPIClient(cfg)
 }

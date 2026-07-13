@@ -100,15 +100,6 @@ func (r *PasswordRotationRunnable) Start(ctx context.Context) error {
 		// Fall through and rotate again using the original password.
 	}
 
-	// Verify current credentials work before doing anything.
-	if _, _, err := apiClient.UserAPI.ValidateCredentials(ctx).
-		Username(username).
-		Password(password).
-		Execute(); err != nil {
-		log.Error(err, "login failed; skipping password rotation")
-		return nil
-	}
-
 	if len(password) >= minPasswordLength {
 		log.Info("password meets length requirement, no rotation needed")
 		return nil
