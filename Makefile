@@ -356,3 +356,36 @@ catalog-build: opm ## Build a catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+
+##@ Helm Chart
+
+HELMIFY_VERSION ?= 0.4.20
+HELMIFY ?= $(LOCALBIN)/helmify
+.PHONY: helmify
+helmify: ## Download helmify locally if necessary.
+ifeq (,$(wildcard $(HELMIFY)))
+	@{ \
+	set -e ; \
+	mkdir -p $(dir $(HELMIFY)) ; \
+	GOBIN=$(LOCALBIN) go install github.com/arttor/helmify/cmd/helmify@v$(HELMIFY_VERSION) ; \
+	mv $(LOCALBIN)/helmify $(HELMIFY)-$(HELMIFY_VERSION) ; \
+	} ; \
+	ln -sf $(HELMIFY)-$(HELMIFY_VERSION) $(HELMIFY)
+endif
+
+.PHONY: helm-chart
+helm-chart: manifests kustomize helmify ## Generate a Helm chart from kustomize output.
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	$(KUSTOMIZE) build config/default | $(HELMIFY) 2>/dev/null
+	@# Rename chart from "chart" → "deptrack-operator"
+	@sed -i 's/^name: chart/name: deptrack-operator/' chart/Chart.yaml
+	@# Rename all helper template references from "chart" to "deptrack-operator"
+	@find chart/templates \( -name '*.yaml' -o -name '*.tpl' \) -exec sed -i 's/include "chart\./include "deptrack-operator./g' {} +
+	@sed -i 's/define "chart\./define "deptrack-operator./g' chart/templates/_helpers.tpl
+	@# Remove duplicate hardcoded selector/template labels that conflict with helpers
+	@sed -i '/matchLabels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' chart/templates/deployment.yaml
+	@sed -i '/labels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' chart/templates/deployment.yaml
+	@# Add imagePullPolicy support (helmify does not generate it)
+	@awk '/AppVersion/{print; print "        {{- if .Values.controllerManager.manager.image.pullPolicy }}"; print "        imagePullPolicy: {{ .Values.controllerManager.manager.image.pullPolicy }}"; print "        {{- end }}"; next}1' chart/templates/deployment.yaml > chart/templates/deployment.yaml.tmp && mv chart/templates/deployment.yaml.tmp chart/templates/deployment.yaml
+	@# Add watch verb for secrets (helmify omits it but the controller needs it)
+	@awk '/- secrets/{found=1} found && /- update/{print; print "  - watch"; found=0; next}1' chart/templates/manager-rbac.yaml > chart/templates/manager-rbac.yaml.tmp && mv chart/templates/manager-rbac.yaml.tmp chart/templates/manager-rbac.yaml

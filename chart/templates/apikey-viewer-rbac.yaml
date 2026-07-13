@@ -1,0 +1,21 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "deptrack-operator.fullname" . }}-apikey-viewer-role
+  labels:
+  {{- include "deptrack-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - dependencytrack.mko.dev
+  resources:
+  - apikeys
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - dependencytrack.mko.dev
+  resources:
+  - apikeys/status
+  verbs:
+  - get

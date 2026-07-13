@@ -10,6 +10,7 @@
 - go version v1.24.0+
 - docker version 17.03+.
 - kubectl version v1.11.3+.
+- helm version v3.0+.
 - Access to a Kubernetes v1.11.3+ cluster.
 
 ### To Deploy on the cluster
@@ -94,21 +95,32 @@ kubectl apply -f https://raw.githubusercontent.com/<org>/deptrack-operator/<tag 
 
 ### By providing a Helm Chart
 
-1. Build the chart using the optional helm plugin
+A Helm chart is provided under `chart/`. Regenerate it from the Kustomize
+output with:
 
 ```sh
-operator-sdk edit --plugins=helm/v1-alpha
+make helm-chart IMG=<some-registry>/deptrack-operator:tag
 ```
 
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
+This uses [helmify](https://github.com/arttor/helmify) to convert the
+Kustomize output into a Helm chart. You can also run it directly:
 
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
+```sh
+kustomize build config/default | helmify
+```
+
+To install the operator from the chart:
+
+```sh
+helm install deptrack-operator ./chart \
+  --set controllerManager.manager.image.repository=<your-registry>/deptrack-operator \
+  --set controllerManager.manager.image.tag=v0.0.1
+```
+
+**NOTE:** After modifying Kustomize manifests, regenerate the Helm chart by
+running `make helm-chart` again. The chart templates are auto-generated — any
+manual changes to `chart/` will be overwritten on regeneration. Preserve
+custom values in `values.yaml` overrides or apply them via `helm install --values`.
 
 ## Contributing
 // TODO(user): Add detailed information on how you would like others to contribute to this project
