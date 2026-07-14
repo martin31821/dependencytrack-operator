@@ -96,17 +96,13 @@ After reconciliation, the operator creates a `Secret` with the API key value. Th
 [Helm](https://helm.sh) must be installed to use the charts. Please refer to
 Helm's [documentation](https://helm.sh/docs) to get started.
 
-Once Helm has been set up correctly, add the repo as follows:
+The chart is published as an [OCI artifact](https://helm.sh/docs/topics/registries/) on GHCR:
 
-    helm repo add dependencytrack-operator https://martin31821.github.io/dependencytrack-operator
+    helm install my-dependencytrack-operator oci://ghcr.io/martin31821/charts/dependencytrack-operator
 
-If you had already added this repo earlier, run `helm repo update` to retrieve
-the latest versions of the packages. You can then run `helm search repo
-dependencytrack-operator` to see the charts.
+To install a specific version:
 
-To install the dependencytrack-operator chart:
-
-    helm install my-dependencytrack-operator dependencytrack-operator/dependencytrack-operator
+    helm install my-dependencytrack-operator oci://ghcr.io/martin31821/charts/dependencytrack-operator --version 0.1.5
 
 To uninstall the chart:
 

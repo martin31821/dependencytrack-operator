@@ -113,50 +113,83 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  helm-release:
-    name: Release charts
-    needs: [build-push]
+  helm-sync:
+    name: Sync Helm chart from kustomize
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          fetch-depth: 0
+          go-version-file: go.mod
 
-      - name: Configure Git
+      - name: Generate Helm chart from kustomize
+        run: make helm-chart IMG=controller:latest
+
+      - name: Check chart is in sync
         run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          if ! git diff --quiet deploy/charts/dependencytrack-operator/; then
+            echo "::error::Helm chart is out of sync with kustomize manifests."
+            echo "Run 'make helm-chart' locally and commit the generated chart."
+            git diff deploy/charts/dependencytrack-operator/
+            exit 1
+          fi
 
-      - name: Update image in chart values
+  helm-release:
+    name: Release chart (OCI)
+    needs: [build-push]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and package chart
         run: |
           IMAGE="${{ needs.build-push.outputs.image-ref }}"
           REPO=$(echo "$IMAGE" | sed 's/:.*$//')
           TAG=$(echo "$IMAGE" | sed 's/.*://')
           echo "Chart image: ${REPO}:${TAG}"
+
+          # Bump chart version (patch only, no commit needed)
+          CHART=deploy/charts/dependencytrack-operator/Chart.yaml
+          VERSION=$(awk '/^version:/{print $2}' "$CHART" | tr -d '"')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+          echo "Bumping chart: ${VERSION} → ${NEW_VERSION}"
+
+          # Update values.yaml for this release (in-memory only)
           sed -i "s|^\\s*repository:.*|      repository: ${REPO}|" deploy/charts/dependencytrack-operator/values.yaml
           sed -i "s|^\\s*tag:.*|      tag: ${TAG}|" deploy/charts/dependencytrack-operator/values.yaml
 
-      - name: Bump chart version
+          # Package chart with bumped version — no filesystem changes to Chart.yaml
+          helm package deploy/charts/dependencytrack-operator/ \
+            --version "$NEW_VERSION" \
+            --app-version "$(awk '/^appVersion:/{gsub(/"/,"",$2); print $2}' "$CHART")" \
+            --destination .
+
+          echo "Package: dependencytrack-operator-${NEW_VERSION}.tgz"
+
+      - name: Push chart to GHCR (OCI)
         run: |
-          CHART=deploy/charts/dependencytrack-operator/Chart.yaml
-          VERSION=$(awk '/^version:/{print $2}' $CHART | tr -d '"')
+          VERSION=$(awk '/^version:/{print $2}' deploy/charts/dependencytrack-operator/Chart.yaml | tr -d '"')
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
-          sed -i "s/^version: .*/version: ${NEW_VERSION}/" $CHART
-          echo "Bumped chart: ${VERSION} → ${NEW_VERSION}"
-
-      - name: Commit and push
-        run: |
-          git add deploy/charts/dependencytrack-operator/
-          git commit -m "chore(release): bump chart version" || echo "No changes to commit"
-          git push
-
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.6.0
-        with:
-          charts_dir: deploy/charts
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          helm push "dependencytrack-operator-${NEW_VERSION}.tgz" \
+            "oci://ghcr.io/${{ github.repository_owner }}/charts"
