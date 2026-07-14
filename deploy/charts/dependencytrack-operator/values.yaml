@@ -14,7 +14,7 @@ controllerManager:
       deptrackUrl: http://localhost:8081
     image:
       repository: ghcr.io/martin31821/dependencytrack-operator
-      tag: 3fc34ef7716e0a28f79e7aa455a079d82950c510
+      tag: 8a462b5d654e2a9b94511411d13413c70a2929f1
     resources:
       limits:
         cpu: 500m
