@@ -20,6 +20,58 @@ declarative approach** to:
 Note, that we currently see this as an intermediate solution until the gap is
 closed in upstream DependencyTrack.
 
+## Custom Resources
+
+The operator provides two CRDs in the `dependencytrack.mko.dev/v1alpha1` API group.
+
+### Team
+
+Creates and manages a **Team** in DependencyTrack.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `spec.name` | string | No | Human-readable team name |
+| `status.uuid` | string | — | DependencyTrack UUID assigned to the team |
+| `status.conditions` | []Condition | — | Reconciliation state |
+
+**Example:**
+
+```yaml
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Team
+metadata:
+  name: my-team
+  namespace: default
+```
+
+### APIKey
+
+Creates and manages an **API access key** in DependencyTrack, scoped to a Team. The generated key value is stored in a Kubernetes `Secret`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `spec.teamRef` | string | Yes | Name of the `Team` CR (same namespace) this key belongs to |
+| `spec.secretName` | string | Yes | Kubernetes `Secret` where the generated key is stored |
+| `spec.comment` | string | No | Human-readable label for the key in DependencyTrack |
+| `status.publicId` | string | — | DependencyTrack's stable key identifier (for updates/deletes) |
+| `status.conditions` | []Condition | — | Reconciliation state |
+
+**Example:**
+
+```yaml
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: APIKey
+metadata:
+  name: my-api-key
+  namespace: default
+spec:
+  teamRef: my-team
+  secretName: my-team-api-key
+  comment: "CI/CD pipeline key"
+```
+
+After reconciliation, the operator creates a `Secret` with the API key value. The `Team` must exist before the `APIKey` is reconciled — the controller references the `Team` by name to create the key under that team in DependencyTrack.
+
 ## Getting Started
 
 ### Prerequisites
