@@ -81,3 +81,57 @@ helm install deptrack-operator ./deploy/charts/dependencytrack-operator \
 running `make helm-chart` again. The chart templates are auto-generated — any
 manual changes to `deploy/charts/dependencytrack-operator` will be overwritten on regeneration. Preserve
 custom values in `values.yaml` overrides or apply them via `helm install --values`.
+
+### Environment variables
+
+The operator container requires these environment variables:
+
+| Variable                      | Description                                                                                                        | Default                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| `DEPTRACK_URL`                | HTTP(S) URL of the DependencyTrack instance to manage                                                              | `http://localhost:8081` |
+| `DEPTRACK_CREDENTIALS_SECRET` | Name of the Kubernetes `Secret` that holds the `username` and `password` used to authenticate with DependencyTrack | `deptrack-credentials`  |
+| `POD_NAMESPACE`               | Namespace the operator runs in (auto-injected by Kubernetes)                                                       | auto-injected           |
+
+The credentials `Secret` must contain two keys:
+
+| Key        | Description                                                                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `username` | Admin username for DependencyTrack (typically `admin`)                                                                                               |
+| `password` | Password for that user. The operator automatically rotates weak passwords (fewer than 30 characters) to a cryptographically random value on startup. |
+
+**Bootstrapping with a fresh DependencyTrack instance:** If the credentials
+`Secret` does not exist, the operator creates one with `admin:admin` and then
+immediately rotates the password in DependencyTrack via the `ForceChangePassword`
+API. After the first successful rotation, the operator never reverts to the
+hard-coded defaults.
+
+### Helm configuration reference
+
+When deploying with the provided Helm chart you can override the defaults
+via `--set` flags or a custom `values.yaml` file:
+
+```yaml
+controllerManager:
+  manager:
+    env:
+      deptrackUrl: https://dtrack.example.com # your DependencyTrack URL
+      deptrackCredentialsSecret: deptrack-credentials # secret name (unchanged)
+    image:
+      repository: ghcr.io/your-org/dependencytrack-operator
+      tag: v1.0.0
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
+  replicas: 2 # set > 1 for HA leader election
+```
+
+### Cert-manager (optional)
+
+For production deployments you may want to enable cert-manager so the metrics
+and webhook endpoints use CA-signed TLS certificates. Uncomment the relevant
+lines in `config/default/kustomization.yaml` and `config/prometheus/kustomization.yaml`
+before building the Helm chart.
