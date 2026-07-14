@@ -88,7 +88,7 @@ The operator container requires these environment variables:
 
 | Variable                      | Description                                                                                                        | Default                 |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| `DEPTRACK_URL`                | HTTP(S) URL of the DependencyTrack instance to manage                                                              | `http://localhost:8081` |
+| `DEPTRACK_URL`                | HTTP(S) URL of the DependencyTrack instance to manage (e.g. `http://dtrack-service:8080`)                           | `http://dtrack-service:8080` |
 | `DEPTRACK_CREDENTIALS_SECRET` | Name of the Kubernetes `Secret` that holds the `username` and `password` used to authenticate with DependencyTrack | `deptrack-credentials`  |
 | `POD_NAMESPACE`               | Namespace the operator runs in (auto-injected by Kubernetes)                                                       | auto-injected           |
 
