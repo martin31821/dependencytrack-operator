@@ -14,7 +14,11 @@ spec:
     singular: team
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.uuid
+      name: UUID
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Team is the Schema for the teams API.
@@ -40,13 +44,27 @@ spec:
             description: TeamSpec defines the desired state of Team.
             properties:
               name:
-                description: Name of the team to create
+                description: Name of the team to create.
                 type: string
+              permissions:
+                description: |-
+                  Permissions is an ordered list of permission names to assign to this team.
+                  Valid permission names include: PORTFOLIO_VIEW, PORTFOLIO_MANAGEMENT,
+                  VIEW_VULNERABILITY, VULNERABILITY_ANALYSIS, BOM_UPLOAD, PROJECT_CREATION,
+                  PROJECT_CREATION_UPLOAD, SYSTEM_CONFIGURATION, ACCESS_MANAGEMENT,
+                  VIEW_PORTFOLIO, PROJECT_READ, VULNERABILITY_ASSESSMENT, and others
+                  specific to the DependencyTrack version in use.
+                  Omit to leave existing permissions unchanged; pass an empty array to
+                  clear all permissions.
+                items:
+                  type: string
+                type: array
             type: object
           status:
             description: TeamStatus defines the observed state of Team.
             properties:
               conditions:
+                description: Conditions reflect the current reconciliation state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -102,8 +120,17 @@ spec:
                   - type
                   type: object
                 type: array
+              name:
+                description: Name records the name that was last synced to DependencyTrack.
+                type: string
+              permissions:
+                description: |-
+                  Permissions tracks the permissions last synced to DependencyTrack.
+                  This is used for status-only observability; the controller reconciles
+                  the actual permission set each reconciliation cycle.
+                type: string
               uuid:
-                description: UUID is the actual UUID of the team in dependencytrack
+                description: UUID is the actual UUID of the team in dependencytrack.
                 type: string
             type: object
         type: object

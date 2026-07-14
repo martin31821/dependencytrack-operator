@@ -22,19 +22,41 @@ import (
 
 // TeamSpec defines the desired state of Team.
 type TeamSpec struct {
-	// Name of the team to create
+	// Name of the team to create.
 	Name string `json:"name,omitempty"`
+
+	// Permissions is an ordered list of permission names to assign to this team.
+	// Valid permission names include: PORTFOLIO_VIEW, PORTFOLIO_MANAGEMENT,
+	// VIEW_VULNERABILITY, VULNERABILITY_ANALYSIS, BOM_UPLOAD, PROJECT_CREATION,
+	// PROJECT_CREATION_UPLOAD, SYSTEM_CONFIGURATION, ACCESS_MANAGEMENT,
+	// VIEW_PORTFOLIO, PROJECT_READ, VULNERABILITY_ASSESSMENT, and others
+	// specific to the DependencyTrack version in use.
+	// Omit to leave existing permissions unchanged; pass an empty array to
+	// clear all permissions.
+	// +kubebuilder:validation:Optional
+	Permissions []string `json:"permissions,omitempty"`
 }
 
 // TeamStatus defines the observed state of Team.
 type TeamStatus struct {
-	// UUID is the actual UUID of the team in dependencytrack
-	UUID       string             `json:"uuid,omitempty"`
+	// UUID is the actual UUID of the team in dependencytrack.
+	UUID string `json:"uuid,omitempty"`
+
+	// Permissions tracks the permissions last synced to DependencyTrack.
+	// This is used for status-only observability; the controller reconciles
+	// the actual permission set each reconciliation cycle.
+	Permissions string `json:"permissions,omitempty"`
+
+	// Conditions reflect the current reconciliation state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// Name records the name that was last synced to DependencyTrack.
+	Name string `json:"name,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="UUID",type=string,JSONPath=`.status.uuid`
 
 // Team is the Schema for the teams API.
 type Team struct {

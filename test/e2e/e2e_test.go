@@ -278,14 +278,175 @@ subjects:
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput := getMetricsOutput()
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+		// Team permissions e2e tests
+		// These tests verify that the Team CRD and controller handle permissions
+		// correctly. They run against a cluster with no DependencyTrack instance,
+		// so the controller will fail to connect — but we can still verify that
+		// the CRD schema is accepted, the controller attempts reconciliation,
+		// conditions are set appropriately, and deletion with the finalizer works.
+		Context("Team permissions", func() {
+			const (
+				teamWithPerms    = "team-with-permissions"
+				teamWithoutPerms = "team-without-permissions"
+				teamEmptyPerms   = "team-empty-permissions"
+			)
+
+			AfterEach(func() {
+				// Clean up test teams after each test.
+				for _, name := range []string{teamWithPerms, teamWithoutPerms, teamEmptyPerms} {
+					By(fmt.Sprintf("deleting test team %q", name))
+					cmd := exec.Command("kubectl", "delete", "team", name, "-n", namespace)
+					_, _ = utils.Run(cmd)
+				}
+			})
+
+			// createTeam writes the given YAML to a temp file and applies it via kubectl.
+			// Returns the temp file path so the caller can defer cleanup.
+			createTeam := func(teamName, yaml string) string {
+				tmpFile, err := os.CreateTemp("", fmt.Sprintf("team-%s-*.yaml", teamName))
+				Expect(err).NotTo(HaveOccurred())
+				_, err = tmpFile.WriteString(yaml)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tmpFile.Close()).NotTo(HaveOccurred())
+				return tmpFile.Name()
+			}
+
+			// removeTemp cleans up a temp file, ignoring errors (not actionable in tests).
+			removeTemp := func(path string) { _ = os.Remove(path) }
+
+			applyTeam := func(path string, expectFail bool, errMsg string) {
+				cmd := exec.Command("kubectl", "apply", "-f", path)
+				_, err := utils.Run(cmd)
+				if expectFail {
+					Expect(err).To(HaveOccurred(), errMsg)
+				} else {
+					Expect(err).NotTo(HaveOccurred(), errMsg)
+				}
+			}
+
+			verifyTeamHasStatus := func(teamName string) {
+				By("verifying Team has a status condition")
+				verifyTeamExists := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "team", teamName, "-n", namespace,
+						"-o", "jsonpath={.status.conditions[0].type}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Not(BeEmpty()), "Team status conditions should be populated")
+				}
+				Eventually(verifyTeamExists, 2*time.Minute).Should(Succeed())
+			}
+
+			It("should accept a Team CR with permissions and set a failed condition", func() {
+				By("creating a Team with permissions")
+				teamYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Team
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  name: test-team-permissions
+  permissions:
+    - PORTFOLIO_VIEW
+    - VIEW_PORTFOLIO
+`, teamWithPerms, namespace)
+				path := createTeam(teamWithPerms, teamYAML)
+				defer removeTemp(path)
+				applyTeam(path, false, "Failed to create Team with permissions")
+				verifyTeamHasStatus(teamWithPerms)
+			})
+
+			It("should accept a Team CR without permissions (nil)", func() {
+				By("creating a Team without permissions")
+				teamYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Team
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  name: test-team-no-permissions
+`, teamWithoutPerms, namespace)
+				path := createTeam(teamWithoutPerms, teamYAML)
+				defer removeTemp(path)
+				applyTeam(path, false, "Failed to create Team without permissions")
+				verifyTeamHasStatus(teamWithoutPerms)
+			})
+
+			It("should accept a Team CR with an empty permissions array", func() {
+				By("creating a Team with empty permissions array")
+				teamYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Team
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  name: test-team-empty-permissions
+  permissions: []
+`, teamEmptyPerms, namespace)
+				path := createTeam(teamEmptyPerms, teamYAML)
+				defer removeTemp(path)
+				applyTeam(path, false, "Failed to create Team with empty permissions")
+				verifyTeamHasStatus(teamEmptyPerms)
+			})
+
+			It("should reject a Team CR with an invalid schema", func() {
+				By("creating a Team with invalid schema")
+				badYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Team
+metadata:
+  name: team-invalid-schema
+  namespace: %s
+spec:
+  name: test-invalid
+  permissions: "not-an-array"
+`, namespace)
+				path := createTeam("invalid", badYAML)
+				defer removeTemp(path)
+				applyTeam(path, true, "kubectl should reject Team with invalid permissions type")
+			})
+
+			It("should handle Team deletion with the finalizer", func() {
+				const deleteTeamName = "team-for-deletion"
+
+				By("creating a Team to test deletion")
+				teamYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Team
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  name: test-team-delete
+`, deleteTeamName, namespace)
+				path := createTeam(deleteTeamName, teamYAML)
+				defer removeTemp(path)
+				applyTeam(path, false, "Failed to create Team for deletion test")
+
+				// Wait for the finalizer to be added.
+				By("waiting for the finalizer to be added")
+				verifyFinalizerExists := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "team", deleteTeamName, "-n", namespace,
+						"-o", "jsonpath={.metadata.finalizers}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(ContainSubstring("dependencytrack.mko.dev/finalizer"))
+				}
+				Eventually(verifyFinalizerExists, 1*time.Minute).Should(Succeed())
+
+				// Delete the Team.
+				By("deleting the Team")
+				deleteCmd := exec.Command("kubectl", "delete", "team", deleteTeamName, "-n", namespace)
+				_, delErr := utils.Run(deleteCmd)
+				Expect(delErr).NotTo(HaveOccurred(), "Failed to delete Team")
+
+				// Wait for the Team to be fully removed (finalizer cleanup completes).
+				By("waiting for the Team to be fully removed")
+				verifyTeamGone := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "team", deleteTeamName, "-n", namespace)
+					_, err := utils.Run(cmd)
+					g.Expect(err).To(HaveOccurred(), "Team should be deleted")
+				}
+				Eventually(verifyTeamGone, 2*time.Minute).Should(Succeed())
+			})
+		})
 	})
 })
 

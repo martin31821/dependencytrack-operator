@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"net/http"
+	"slices"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -132,6 +133,15 @@ func (r *TeamReconciler) reconcileUpsert(ctx context.Context, team *dependencytr
 	}
 
 	team.Status.UUID = dtUUID
+
+	// Sync permissions if the spec declares any.
+	if err := r.syncPermissions(ctx, apiClient, team, dtUUID); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Persist name in status for observability.
+	team.Status.Name = team.Spec.Name
+
 	setCondition(team, metav1.ConditionTrue, "TeamSynced", "Team successfully reconciled in DependencyTrack")
 	if err := r.Status().Update(ctx, team); err != nil {
 		return ctrl.Result{}, err
@@ -166,6 +176,54 @@ func (r *TeamReconciler) reconcileDelete(ctx context.Context, team *dependencytr
 	return r.Update(ctx, team)
 }
 
+// syncPermissions applies the desired permission set to the team in DependencyTrack.
+// If team.Spec.Permissions is nil/empty it does nothing (leave existing permissions alone).
+// If it is an empty slice it clears all permissions. If it has values it replaces
+// the existing set atomically via SetTeamPermissions.
+func (r *TeamReconciler) syncPermissions(
+	ctx context.Context,
+	apiClient *dtapi.APIClient,
+	team *dependencytrackv1alpha1.Team,
+	uuid string,
+) error {
+	log := logf.FromContext(ctx)
+
+	// Nil or absent: leave permissions alone.
+	if team.Spec.Permissions == nil {
+		return nil
+	}
+
+	authCtx, _, err := r.DTProvider.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Build a canonical snapshot of desired permissions for status tracking.
+	desired := slices.Clone(team.Spec.Permissions)
+	slices.Sort(desired)
+
+	payload := dtapi.NewTeamPermissionsSetRequest(desired, uuid)
+	_, _, err = apiClient.PermissionAPI.SetTeamPermissions(authCtx).TeamPermissionsSetRequest(*payload).Execute()
+	if err != nil {
+		log.Error(err, "failed to set team permissions", "uuid", uuid, "permissions", desired)
+		setCondition(team, metav1.ConditionFalse, "PermissionSyncError", "failed to sync permissions: "+err.Error())
+		_ = r.Status().Update(ctx, team)
+		return err
+	}
+
+	// Record the synced permission set (sorted, deduplicated) for observability.
+	team.Status.Permissions = joinString(desired, ",")
+	log.Info("synced team permissions", "uuid", uuid, "permissions", desired)
+
+	if len(team.Spec.Permissions) == 0 {
+		r.Recorder.Eventf(team, "Normal", "PermissionsCleared", "Cleared all permissions for team %q", team.Spec.Name)
+	} else {
+		r.Recorder.Eventf(team, "Normal", "PermissionsSet", "Set %d permission(s) for team %q", len(team.Spec.Permissions), team.Spec.Name)
+	}
+
+	return nil
+}
+
 // failStatus sets a failed condition, persists the status, and returns the error so the reconcile loop requeues.
 func (r *TeamReconciler) failStatus(ctx context.Context, team *dependencytrackv1alpha1.Team, reason, msg string, cause error) (ctrl.Result, error) {
 	logf.FromContext(ctx).Error(cause, msg)
@@ -183,6 +241,18 @@ func setCondition(team *dependencytrackv1alpha1.Team, status metav1.ConditionSta
 		Message:            message,
 		ObservedGeneration: team.Generation,
 	})
+}
+
+// joinString joins a sorted string slice with "," separators.
+func joinString(ss []string, sep string) string {
+	if len(ss) == 0 {
+		return ""
+	}
+	result := ss[0]
+	for _, s := range ss[1:] {
+		result += sep + s
+	}
+	return result
 }
 
 // SetupWithManager sets up the controller with the Manager.

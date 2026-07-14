@@ -31,7 +31,9 @@ Creates and manages a **Team** in DependencyTrack.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `spec.name` | string | No | Human-readable team name |
+| `spec.permissions` | []string | No | List of permission names to assign (omit to leave unchanged, empty array to clear all) |
 | `status.uuid` | string | — | DependencyTrack UUID assigned to the team |
+| `status.permissions` | string | — | Comma-separated list of permissions last synced (observability only) |
 | `status.conditions` | []Condition | — | Reconciliation state |
 
 **Example:**
@@ -42,6 +44,11 @@ kind: Team
 metadata:
   name: my-team
   namespace: default
+spec:
+  name: My Team
+  permissions:
+    - PORTFOLIO_VIEW
+    - VIEW_PORTFOLIO
 ```
 
 ### APIKey
