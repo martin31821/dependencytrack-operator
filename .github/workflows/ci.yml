@@ -4,10 +4,17 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version (e.g. 0.1.6)'
+        required: true
+        type: string
 
 permissions:
   contents: read
   packages: write
+  actions: read
 
 jobs:
   lint:
@@ -73,7 +80,7 @@ jobs:
   build-push:
     name: Build and push image
     needs: [lint, test, test-e2e]
-    if: github.event_name == 'push'
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     outputs:
       image-ref: ${{ steps.meta.outputs.tags }}
@@ -139,6 +146,7 @@ jobs:
 
   helm-release:
     name: Release chart (OCI)
+    if: github.event_name == 'workflow_dispatch'
     needs: [build-push]
     runs-on: ubuntu-latest
     permissions:
@@ -147,6 +155,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
@@ -160,36 +170,61 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Determine release version
+        id: version
+        run: |
+          CHART=deploy/charts/dependencytrack-operator/Chart.yaml
+          VERSION=$(awk '/^version:/{print $2}' "$CHART" | tr -d '"')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Use the manually provided version
+            RELEASE_VERSION="${{ github.event.inputs.release_version }}"
+            echo "Using dispatch version: ${RELEASE_VERSION}"
+          else
+            # Auto-increment patch version
+            RELEASE_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+            echo "Auto-incremented version: ${RELEASE_VERSION}"
+          fi
+          echo "version=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Build and package chart
         run: |
           IMAGE="${{ needs.build-push.outputs.image-ref }}"
           REPO=$(echo "$IMAGE" | sed 's/:.*$//')
           TAG=$(echo "$IMAGE" | sed 's/.*://')
+          VERSION="${{ steps.version.outputs.version }}"
           echo "Chart image: ${REPO}:${TAG}"
-
-          # Bump chart version (patch only, no commit needed)
-          CHART=deploy/charts/dependencytrack-operator/Chart.yaml
-          VERSION=$(awk '/^version:/{print $2}' "$CHART" | tr -d '"')
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
-          echo "Bumping chart: ${VERSION} → ${NEW_VERSION}"
+          echo "Release version: ${VERSION}"
 
           # Update values.yaml for this release (in-memory only)
           sed -i "s|^\\s*repository:.*|      repository: ${REPO}|" deploy/charts/dependencytrack-operator/values.yaml
           sed -i "s|^\\s*tag:.*|      tag: ${TAG}|" deploy/charts/dependencytrack-operator/values.yaml
 
-          # Package chart with bumped version — no filesystem changes to Chart.yaml
+          APP_VERSION=$(awk '/^appVersion:/{gsub(/"/,"",$2); print $2}' "$CHART")
+
+          # Package chart with release version
           helm package deploy/charts/dependencytrack-operator/ \
-            --version "$NEW_VERSION" \
-            --app-version "$(awk '/^appVersion:/{gsub(/"/,"",$2); print $2}' "$CHART")" \
+            --version "$VERSION" \
+            --app-version "$APP_VERSION" \
             --destination .
 
-          echo "Package: dependencytrack-operator-${NEW_VERSION}.tgz"
+          echo "Package: dependencytrack-operator-${VERSION}.tgz"
 
       - name: Push chart to GHCR (OCI)
         run: |
-          VERSION=$(awk '/^version:/{print $2}' deploy/charts/dependencytrack-operator/Chart.yaml | tr -d '"')
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
-          helm push "dependencytrack-operator-${NEW_VERSION}.tgz" \
+          VERSION="${{ steps.version.outputs.version }}"
+          helm push "dependencytrack-operator-${VERSION}.tgz" \
             "oci://ghcr.io/${{ github.repository_owner }}/charts"
+
+      - name: Create Git tag and GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v${VERSION}"
+          echo "Creating tag ${TAG} and release..."
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release ${TAG}"
+          git push origin "$TAG"
+          gh release create "$TAG" --generate-notes --verify-tag
