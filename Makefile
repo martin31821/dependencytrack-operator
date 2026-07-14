@@ -373,19 +373,16 @@ ifeq (,$(wildcard $(HELMIFY)))
 	ln -sf $(HELMIFY)-$(HELMIFY_VERSION) $(HELMIFY)
 endif
 
+CHART_DIR ?= deploy/charts/dependencytrack-operator
 .PHONY: helm-chart
 helm-chart: manifests kustomize helmify ## Generate a Helm chart from kustomize output.
+	mkdir -p $(CHART_DIR)
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	$(KUSTOMIZE) build config/default | $(HELMIFY) 2>/dev/null
-	@# Rename chart from "chart" → "deptrack-operator"
-	@sed -i 's/^name: chart/name: deptrack-operator/' chart/Chart.yaml
-	@# Rename all helper template references from "chart" to "deptrack-operator"
-	@find chart/templates \( -name '*.yaml' -o -name '*.tpl' \) -exec sed -i 's/include "chart\./include "deptrack-operator./g' {} +
-	@sed -i 's/define "chart\./define "deptrack-operator./g' chart/templates/_helpers.tpl
+	$(KUSTOMIZE) build config/default | $(HELMIFY) $(CHART_DIR) 2>/dev/null
 	@# Remove duplicate hardcoded selector/template labels that conflict with helpers
-	@sed -i '/matchLabels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' chart/templates/deployment.yaml
-	@sed -i '/labels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' chart/templates/deployment.yaml
+	@sed -i '/matchLabels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' $(CHART_DIR)/templates/deployment.yaml
+	@sed -i '/labels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' $(CHART_DIR)/templates/deployment.yaml
 	@# Add imagePullPolicy support (helmify does not generate it)
-	@awk '/AppVersion/{print; print "        {{- if .Values.controllerManager.manager.image.pullPolicy }}"; print "        imagePullPolicy: {{ .Values.controllerManager.manager.image.pullPolicy }}"; print "        {{- end }}"; next}1' chart/templates/deployment.yaml > chart/templates/deployment.yaml.tmp && mv chart/templates/deployment.yaml.tmp chart/templates/deployment.yaml
+	@awk '/AppVersion/{print; print "        {{- if .Values.controllerManager.manager.image.pullPolicy }}"; print "        imagePullPolicy: {{ .Values.controllerManager.manager.image.pullPolicy }}"; print "        {{- end }}"; next}1' $(CHART_DIR)/templates/deployment.yaml > $(CHART_DIR)/templates/deployment.yaml.tmp && mv $(CHART_DIR)/templates/deployment.yaml.tmp $(CHART_DIR)/templates/deployment.yaml
 	@# Add watch verb for secrets (helmify omits it but the controller needs it)
-	@awk '/- secrets/{found=1} found && /- update/{print; print "  - watch"; found=0; next}1' chart/templates/manager-rbac.yaml > chart/templates/manager-rbac.yaml.tmp && mv chart/templates/manager-rbac.yaml.tmp chart/templates/manager-rbac.yaml
+	@awk '/- secrets/{found=1} found && /- update/{print; print "  - watch"; found=0; next}1' $(CHART_DIR)/templates/manager-rbac.yaml > $(CHART_DIR)/templates/manager-rbac.yaml.tmp && mv $(CHART_DIR)/templates/manager-rbac.yaml.tmp $(CHART_DIR)/templates/manager-rbac.yaml

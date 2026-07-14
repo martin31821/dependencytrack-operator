@@ -1,9 +1,9 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "deptrack-operator.fullname" . }}-metrics-auth-role
+  name: {{ include "dependencytrack-operator.fullname" . }}-metrics-auth-role
   labels:
-  {{- include "deptrack-operator.labels" . | nindent 4 }}
+  {{- include "dependencytrack-operator.labels" . | nindent 4 }}
 rules:
 - apiGroups:
   - authentication.k8s.io
@@ -21,14 +21,14 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "deptrack-operator.fullname" . }}-metrics-auth-rolebinding
+  name: {{ include "dependencytrack-operator.fullname" . }}-metrics-auth-rolebinding
   labels:
-  {{- include "deptrack-operator.labels" . | nindent 4 }}
+  {{- include "dependencytrack-operator.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: '{{ include "deptrack-operator.fullname" . }}-metrics-auth-role'
+  name: '{{ include "dependencytrack-operator.fullname" . }}-metrics-auth-role'
 subjects:
 - kind: ServiceAccount
-  name: '{{ include "deptrack-operator.serviceAccountName" . }}'
+  name: '{{ include "dependencytrack-operator.serviceAccountName" . }}'
   namespace: '{{ .Release.Namespace }}'

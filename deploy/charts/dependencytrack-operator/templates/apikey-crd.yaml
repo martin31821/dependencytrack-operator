@@ -5,7 +5,7 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
   labels:
-  {{- include "deptrack-operator.labels" . | nindent 4 }}
+  {{- include "dependencytrack-operator.labels" . | nindent 4 }}
 spec:
   group: dependencytrack.mko.dev
   names:

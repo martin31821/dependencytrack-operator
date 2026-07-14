@@ -13,7 +13,7 @@ controllerManager:
       deptrackCredentialsSecret: deptrack-credentials
       deptrackUrl: http://localhost:8081
     image:
-      repository: deptrack-operator
+      repository: controller
       tag: latest
     resources:
       limits:

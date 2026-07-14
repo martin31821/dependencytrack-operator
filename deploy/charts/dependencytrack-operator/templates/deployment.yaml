@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "deptrack-operator.fullname" . }}-controller-manager
+  name: {{ include "dependencytrack-operator.fullname" . }}-controller-manager
   labels:
     control-plane: controller-manager
-  {{- include "deptrack-operator.labels" . | nindent 4 }}
+  {{- include "dependencytrack-operator.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.controllerManager.replicas }}
   selector:
     matchLabels:
       control-plane: controller-manager
-    {{- include "deptrack-operator.selectorLabels" . | nindent 6 }}
+    {{- include "dependencytrack-operator.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
         control-plane: controller-manager
-      {{- include "deptrack-operator.selectorLabels" . | nindent 8 }}
+      {{- include "dependencytrack-operator.selectorLabels" . | nindent 8 }}
       annotations:
         kubectl.kubernetes.io/default-container: manager
     spec:
@@ -60,7 +60,7 @@ spec:
       nodeSelector: {{- toYaml .Values.controllerManager.nodeSelector | nindent 8 }}
       securityContext: {{- toYaml .Values.controllerManager.podSecurityContext | nindent
         8 }}
-      serviceAccountName: {{ include "deptrack-operator.serviceAccountName" . }}
+      serviceAccountName: {{ include "dependencytrack-operator.serviceAccountName" . }}
       terminationGracePeriodSeconds: 10
       tolerations: {{- toYaml .Values.controllerManager.tolerations | nindent 8 }}
       topologySpreadConstraints: {{- toYaml .Values.controllerManager.topologySpreadConstraints

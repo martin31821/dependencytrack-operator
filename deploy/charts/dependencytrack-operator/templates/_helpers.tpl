@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "deptrack-operator.name" -}}
+{{- define "dependencytrack-operator.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "deptrack-operator.fullname" -}}
+{{- define "dependencytrack-operator.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "deptrack-operator.chart" -}}
+{{- define "dependencytrack-operator.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "deptrack-operator.labels" -}}
-helm.sh/chart: {{ include "deptrack-operator.chart" . }}
-{{ include "deptrack-operator.selectorLabels" . }}
+{{- define "dependencytrack-operator.labels" -}}
+helm.sh/chart: {{ include "dependencytrack-operator.chart" . }}
+{{ include "dependencytrack-operator.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,16 +45,16 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "deptrack-operator.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "deptrack-operator.name" . }}
+{{- define "dependencytrack-operator.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "dependencytrack-operator.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "deptrack-operator.serviceAccountName" -}}
-{{- $default := (include "deptrack-operator.fullname" .) }}
+{{- define "dependencytrack-operator.serviceAccountName" -}}
+{{- $default := (include "dependencytrack-operator.fullname" .) }}
 {{- with .Values.serviceAccount }}
 {{- if .create }}
 {{- default $default .name }}
