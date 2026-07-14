@@ -1,20 +1,20 @@
 controllerManager:
   manager:
     args:
-    - --metrics-bind-address=:8443
-    - --leader-elect
-    - --health-probe-bind-address=:8081
+      - --metrics-bind-address=:8443
+      - --leader-elect
+      - --health-probe-bind-address=:8081
     containerSecurityContext:
       allowPrivilegeEscalation: false
       capabilities:
         drop:
-        - ALL
+          - ALL
     env:
       deptrackCredentialsSecret: deptrack-credentials
       deptrackUrl: http://localhost:8081
     image:
-      repository: ghcr.io/martin31821/dependencytrack-operator
-      tag: 73f58e269f2b21f5800287280c631b8464dd02e3
+      repository: controller
+      tag: latest
     resources:
       limits:
         cpu: 500m
@@ -33,10 +33,10 @@ controllerManager:
 kubernetesClusterDomain: cluster.local
 metricsService:
   ports:
-  - name: https
-    port: 8443
-    protocol: TCP
-    targetPort: 8443
+    - name: https
+      port: 8443
+      protocol: TCP
+      targetPort: 8443
   type: ClusterIP
 serviceAccount:
   annotations: {}
