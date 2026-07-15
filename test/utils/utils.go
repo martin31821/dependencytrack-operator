@@ -17,12 +17,11 @@ limitations under the License.
 package utils
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
 )
@@ -34,6 +33,97 @@ const (
 
 	certmanagerVersion = "v1.16.3"
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
+)
+
+var (
+	// postgresqlManifest is the YAML for a lightweight PostgreSQL
+	// deployment. DependencyTrack expects a service named "postgresql".
+	postgresqlManifest = `apiVersion: v1
+kind: Namespace
+metadata:
+  name: dependency-track
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dt-postgres
+  namespace: dependency-track
+type: Opaque
+stringData:
+  POSTGRES_DB: dtrack
+  POSTGRES_USER: dtrack
+  POSTGRES_PASSWORD: dtrack123
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  namespace: dependency-track
+  labels:
+    app: postgresql
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: postgresql
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql
+  namespace: dependency-track
+  labels:
+    app: postgresql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: postgresql
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          envFrom:
+            - secretRef:
+                name: dt-postgres
+          ports:
+            - containerPort: 5432
+              name: postgres
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - dtrack
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - dtrack
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: postgres-data
+          emptyDir: {}
+          `
 )
 
 func warnError(err error) {
@@ -201,54 +291,148 @@ func GetProjectDir() (string, error) {
 	return wd, nil
 }
 
-// UncommentCode searches for target in the file and remove the comment prefix
-// of the target content. The target content may span multiple lines.
-func UncommentCode(filename, target, prefix string) error {
-	// false positive
-	// nolint:gosec
-	content, err := os.ReadFile(filename)
+// GenerateKEK returns a random base64-encoded 32-byte key suitable for
+// DependencyTrack's secretManagement.database.kek.value setting.
+func GenerateKEK() (string, error) {
+	cmd := exec.Command("openssl", "rand", "-base64", "32")
+	output, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("failed to read file %q: %w", filename, err)
+		return "", fmt.Errorf("openssl rand: %w", err)
 	}
-	strContent := string(content)
-
-	idx := strings.Index(strContent, target)
-	if idx < 0 {
-		return fmt.Errorf("unable to find the code %q to be uncomment", target)
-	}
-
-	out := new(bytes.Buffer)
-	_, err = out.Write(content[:idx])
-	if err != nil {
-		return fmt.Errorf("failed to write to output: %w", err)
-	}
-
-	scanner := bufio.NewScanner(bytes.NewBufferString(target))
-	if !scanner.Scan() {
-		return nil
-	}
-	for {
-		if _, err = out.WriteString(strings.TrimPrefix(scanner.Text(), prefix)); err != nil {
-			return fmt.Errorf("failed to write to output: %w", err)
-		}
-		// Avoid writing a newline in case the previous line was the last in target.
-		if !scanner.Scan() {
-			break
-		}
-		if _, err = out.WriteString("\n"); err != nil {
-			return fmt.Errorf("failed to write to output: %w", err)
-		}
-	}
-
-	if _, err = out.Write(content[idx+len(target):]); err != nil {
-		return fmt.Errorf("failed to write to output: %w", err)
-	}
-
-	// false positive
-	// nolint:gosec
-	if err = os.WriteFile(filename, out.Bytes(), 0644); err != nil {
-		return fmt.Errorf("failed to write file %q: %w", filename, err)
-	}
-
-	return nil
+	return string(output), nil
 }
+
+// InstallDependencyTrack installs PostgreSQL and DependencyTrack into the
+// cluster. DependencyTrack requires a PostgreSQL service named "postgresql"
+// and a Key Encryption Key (KEK). Both are provisioned here.
+func InstallDependencyTrack() error {
+	_, _ = fmt.Fprintf(GinkgoWriter, "Installing DependencyTrack via Helm...\\n")
+
+	// Create the namespace and PostgreSQL deployment (lightweight, no Helm needed).
+	_, _ = fmt.Fprintf(GinkgoWriter, "Installing PostgreSQL...\\n")
+	tmpFile, err := os.CreateTemp("", "dt-postgres-*.yaml")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	defer func() {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+	}()
+	_, err = tmpFile.WriteString(postgresqlManifest)
+	if err != nil {
+		return fmt.Errorf("write postgresql manifest: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("close postgresql manifest: %w", err)
+	}
+
+	_, err = Run(exec.Command("kubectl", "apply", "-f", tmpFile.Name()))
+	if err != nil {
+		return fmt.Errorf("apply postgresql manifest: %w", err)
+	}
+
+	// Wait for PostgreSQL to be Ready.
+	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for PostgreSQL to be Ready...\\n")
+	pgWait := exec.Command("kubectl", "wait", "--for=condition=Ready",
+		"pod",
+		"-l", "app=postgresql",
+		"-n", "dependency-track",
+		"--timeout", "3m")
+	_, err = Run(pgWait)
+	if err != nil {
+		return fmt.Errorf("timeout waiting for PostgreSQL pod: %w", err)
+	}
+
+	// Add the DependencyTrack Helm chart repo.
+	_, _ = fmt.Fprintf(GinkgoWriter, "Installing DependencyTrack...\\n")
+	addCmd := exec.Command("helm", "repo", "add", "dependencytrack",
+		"https://dependencytrack.github.io/helm-charts")
+	_, _ = Run(addCmd) // idempotent
+
+	updateCmd := exec.Command("helm", "repo", "update")
+	_, err = Run(updateCmd)
+	if err != nil {
+		return fmt.Errorf("helm repo update: %w", err)
+	}
+
+	// Generate a KEK (Key Encryption Key) required by DependencyTrack.
+	keq, err := GenerateKEK()
+	if err != nil {
+		return fmt.Errorf("generate KEK: %w", err)
+	}
+
+	// Install DependencyTrack with the KEK.
+	installCmd := exec.Command("helm", "install", "my-dependency-track",
+		"dependencytrack/dependency-track",
+		"--version", "2.0.0-rc.2",
+		"--namespace", "dependency-track",
+		"--set", "secretManagement.database.kek.value="+keq,
+		"--set", "database.username=dtrack",
+		"--set", "database.password=dtrack123",
+	)
+	_, err = Run(installCmd)
+	if err != nil {
+		return fmt.Errorf("helm install dependency-track: %w", err)
+	}
+
+	// Wait for the API server pod to be Running.
+	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for DependencyTrack API pod to be Ready...\\n")
+	waitCmd := exec.Command("kubectl", "wait", "--for=condition=Ready",
+		"pod",
+		"-l", "app.kubernetes.io/instance=my-dependency-track,app.kubernetes.io/component=api-server",
+		"-n", "dependency-track",
+		"--timeout", "5m")
+	_, err = Run(waitCmd)
+	if err != nil {
+		return fmt.Errorf("timeout waiting for DependencyTrack API pod: %w", err)
+	}
+
+	// Wait for the API to answer requests. Run the probe in the API pod because
+	// the service DNS name is only resolvable inside the cluster. The per-request
+	// timeout prevents a failed probe from hanging the suite indefinitely.
+	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for DependencyTrack API to accept connections...\\n")
+	var lastErr error
+	for i := 0; i < 120; i++ {
+		checkCmd := exec.Command("kubectl", "exec",
+			"deployment/my-dependency-track-api-server",
+			"--namespace", "dependency-track",
+			"--", "curl", "--fail", "--silent", "--show-error", "--max-time", "5",
+			"--output", "/dev/null", "http://127.0.0.1:8080/api/version")
+		if _, err := Run(checkCmd); err == nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "DependencyTrack API is ready.\\n")
+			return nil
+		} else {
+			lastErr = err
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return fmt.Errorf("DependencyTrack API not ready after 2 minutes: %w", lastErr)
+}
+
+// UninstallDependencyTrack removes the DependencyTrack Helm release and namespace.
+func UninstallDependencyTrack() {
+	_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling DependencyTrack...\\n")
+
+	// Uninstall Helm release.
+	uninstallCmd := exec.Command("helm", "uninstall", "my-dependency-track", "--namespace", "dependency-track")
+	_, _ = Run(uninstallCmd)
+
+	// Delete the namespace (also removes PostgreSQL).
+	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for pods to terminate...\\n")
+	_, _ = Run(exec.Command("kubectl", "delete", "namespace", "dependency-track", "--ignore-not-found=true"))
+
+	// Remove the Helm repo.
+	removeCmd := exec.Command("helm", "repo", "remove", "dependencytrack")
+	_, _ = Run(removeCmd)
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "DependencyTrack uninstalled.\\n")
+}
+
+// DependencyTrackHost returns the Kubernetes service hostname for the
+// DependencyTrack instance, suitable for use as DEPTRACK_URL
+// (e.g. http://my-dependency-track-api-server.dependency-track.svc.cluster.local:8080).
+func DependencyTrackHost() string {
+	return "http://my-dependency-track-api-server.dependency-track.svc.cluster.local:8080"
+}
+
+// UncommentCode searches for target in the file and remove the comment prefix

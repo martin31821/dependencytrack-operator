@@ -192,5 +192,3 @@ helm-chart: manifests ## Generate a Helm chart from kustomize output.
 	@sed -i '/labels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' $(CHART_DIR)/templates/deployment.yaml
 	@# Add imagePullPolicy support (helmify does not generate it)
 	@awk '/AppVersion/{print; print "        {{- if .Values.controllerManager.manager.image.pullPolicy }}"; print "        imagePullPolicy: {{ .Values.controllerManager.manager.image.pullPolicy }}"; print "        {{- end }}"; next}1' $(CHART_DIR)/templates/deployment.yaml > $(CHART_DIR)/templates/deployment.yaml.tmp && mv $(CHART_DIR)/templates/deployment.yaml.tmp $(CHART_DIR)/templates/deployment.yaml
-	@# Add watch verb for secrets (helmify omits it but the controller needs it)
-	@awk '/- secrets/{found=1} found && /- update/{print; print "  - watch"; found=0; next}1' $(CHART_DIR)/templates/manager-rbac.yaml > $(CHART_DIR)/templates/manager-rbac.yaml.tmp && mv $(CHART_DIR)/templates/manager-rbac.yaml.tmp $(CHART_DIR)/templates/manager-rbac.yaml
