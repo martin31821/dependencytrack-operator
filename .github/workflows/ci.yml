@@ -24,15 +24,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+      - name: Set up Nix
+        uses: cachix/install-nix-action@v31
 
-      - name: Run linter
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.1.0
+      - name: Lint
+        run: nix develop --command make lint
 
   test:
     name: Tests
@@ -41,15 +37,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+      - name: Set up Nix
+        uses: cachix/install-nix-action@v31
 
-      - name: Running Tests
-        run: |
-          go mod tidy
-          make test
+      - name: Run tests
+        run: nix develop --command make test
 
   test-e2e:
     name: E2E Tests
@@ -58,24 +50,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+      - name: Set up Nix
+        uses: cachix/install-nix-action@v31
 
-      - name: Install kind
-        run: |
-          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
-          chmod +x ./kind
-          sudo mv ./kind /usr/local/bin/kind
-
-      - name: Verify kind
-        run: kind version
-
-      - name: Running E2E Tests
-        run: |
-          go mod tidy
-          make test-e2e
+      - name: Run E2E tests
+        run: nix develop --command make test-e2e
 
   build-push:
     name: Build and push image
@@ -127,13 +106,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+      - name: Set up Nix
+        uses: cachix/install-nix-action@v31
 
       - name: Generate Helm chart from kustomize
-        run: make helm-chart IMG=controller:latest
+        run: nix develop --command make helm-chart IMG=controller:latest
 
       - name: Check chart is in sync
         run: |
