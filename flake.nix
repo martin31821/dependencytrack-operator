@@ -41,6 +41,7 @@
               kustomize
               kind
               operator-sdk
+              podman
               setup-envtest
             ];
           };
