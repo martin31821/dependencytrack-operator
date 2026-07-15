@@ -32,13 +32,16 @@ import (
 
 var _ = Describe("Team Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const (
+			resourceName = "test-resource"
+			testNS       = "default"
+		)
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: testNS,
 		}
 		team := &dependencytrackv1alpha1.Team{}
 
@@ -49,7 +52,7 @@ var _ = Describe("Team Controller", func() {
 				resource := &dependencytrackv1alpha1.Team{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
-						Namespace: "default",
+						Namespace: testNS,
 					},
 					// TODO(user): Specify other spec details if needed.
 				}

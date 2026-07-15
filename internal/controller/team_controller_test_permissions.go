@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+const testPerm = "PORTFOLIO_VIEW"
+
 func TestJoinString(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -41,13 +43,13 @@ func TestJoinString(t *testing.T) {
 		},
 		{
 			name:     "single element",
-			input:    []string{"PORTFOLIO_VIEW"},
+			input:    []string{testPerm},
 			sep:      ",",
-			expected: "PORTFOLIO_VIEW",
+			expected: testPerm,
 		},
 		{
 			name:     "multiple elements",
-			input:    []string{"VIEW_PORTFOLIO", "PORTFOLIO_VIEW"},
+			input:    []string{"VIEW_PORTFOLIO", testPerm},
 			sep:      ",",
 			expected: "VIEW_PORTFOLIO,PORTFOLIO_VIEW",
 		},
