@@ -20,6 +20,7 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -203,12 +204,19 @@ func (r *TeamReconciler) syncPermissions(
 	slices.Sort(desired)
 
 	payload := dtapi.NewTeamPermissionsSetRequest(desired, uuid)
-	_, _, err = apiClient.PermissionAPI.SetTeamPermissions(authCtx).TeamPermissionsSetRequest(*payload).Execute()
+	_, resp, err := apiClient.PermissionAPI.SetTeamPermissions(authCtx).TeamPermissionsSetRequest(*payload).Execute()
 	if err != nil {
-		log.Error(err, "failed to set team permissions", "uuid", uuid, "permissions", desired)
-		setCondition(team, metav1.ConditionFalse, "PermissionSyncError", "failed to sync permissions: "+err.Error())
-		_ = r.Status().Update(ctx, team)
-		return err
+		// DependencyTrack sometimes returns 2xx with an empty body on success.
+		// The OpenAPI-generated code fails to decode an empty body as "unexpected EOF".
+		// Treat a 2xx response with this specific decode error as success.
+		if resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 && strings.Contains(err.Error(), "unexpected EOF") {
+			log.Info("set team permissions (empty response, but 2xx status)", "uuid", uuid, "permissions", desired)
+		} else {
+			log.Error(err, "failed to set team permissions", "uuid", uuid, "permissions", desired)
+			setCondition(team, metav1.ConditionFalse, "PermissionSyncError", "failed to sync permissions: "+err.Error())
+			_ = r.Status().Update(ctx, team)
+			return err
+		}
 	}
 
 	// Record the synced permission set (sorted, deduplicated) for observability.
