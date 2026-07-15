@@ -58,7 +58,7 @@ jobs:
 
   build-push:
     name: Build and push image
-    needs: [lint, test, test-e2e]
+    needs: [lint, test, test-e2e, helm-sync]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     outputs:
