@@ -57,6 +57,7 @@ test: manifests generate fmt envtest ## Run tests.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
 # CertManager is installed by default; skip with:
 # - CERT_MANAGER_INSTALL_SKIP=true
+KIND ?= kind
 KIND_CLUSTER ?= deptrack-operator-test-e2e
 
 .PHONY: setup-test-e2e
