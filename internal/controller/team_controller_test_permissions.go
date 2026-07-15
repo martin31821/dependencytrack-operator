@@ -17,10 +17,64 @@ limitations under the License.
 package controller
 
 import (
+	"reflect"
 	"testing"
+
+	"github.com/martin31821/dependencytrack-operator/gen/dtapi"
 )
 
-const testPerm = "PORTFOLIO_VIEW"
+const (
+	testPerm = "PORTFOLIO_MANAGEMENT"
+	testBOM  = "BOM_UPLOAD"
+	testView = "VIEW_PORTFOLIO"
+)
+
+func TestPermissionDelta(t *testing.T) {
+	tests := []struct {
+		name          string
+		current       []dtapi.Permission
+		desired       []string
+		wantAdd       []string
+		wantRemove    []string
+		wantCanonical []string
+	}{
+		{
+			name:          "adds and removes permissions",
+			current:       []dtapi.Permission{{Name: testBOM}, {Name: testView}},
+			desired:       []string{testView, testPerm},
+			wantAdd:       []string{testPerm},
+			wantRemove:    []string{testBOM},
+			wantCanonical: []string{testPerm, testView},
+		},
+		{
+			name:          "deduplicates and sorts desired permissions",
+			desired:       []string{testView, testBOM, testView},
+			wantAdd:       []string{testBOM, testView},
+			wantCanonical: []string{testBOM, testView},
+		},
+		{
+			name:       "clears all permissions",
+			current:    []dtapi.Permission{{Name: testView}},
+			desired:    []string{},
+			wantRemove: []string{testView},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotAdd, gotRemove, gotCanonical := permissionDelta(tt.current, tt.desired)
+			if !reflect.DeepEqual(gotAdd, tt.wantAdd) {
+				t.Errorf("permissionDelta() additions = %v; want %v", gotAdd, tt.wantAdd)
+			}
+			if !reflect.DeepEqual(gotRemove, tt.wantRemove) {
+				t.Errorf("permissionDelta() removals = %v; want %v", gotRemove, tt.wantRemove)
+			}
+			if !reflect.DeepEqual(gotCanonical, tt.wantCanonical) {
+				t.Errorf("permissionDelta() canonical = %v; want %v", gotCanonical, tt.wantCanonical)
+			}
+		})
+	}
+}
 
 func TestJoinString(t *testing.T) {
 	tests := []struct {
@@ -49,9 +103,9 @@ func TestJoinString(t *testing.T) {
 		},
 		{
 			name:     "multiple elements",
-			input:    []string{"VIEW_PORTFOLIO", testPerm},
+			input:    []string{testView, testPerm},
 			sep:      ",",
-			expected: "VIEW_PORTFOLIO,PORTFOLIO_VIEW",
+			expected: testView + "," + testPerm,
 		},
 		{
 			name:     "different separator",

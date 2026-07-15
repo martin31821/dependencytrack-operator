@@ -55,7 +55,7 @@ type APIKeyReconciler struct {
 // +kubebuilder:rbac:groups=dependencytrack.mko.dev,resources=apikeys/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=dependencytrack.mko.dev,resources=apikeys/finalizers,verbs=update
 // +kubebuilder:rbac:groups=dependencytrack.mko.dev,resources=teams,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 func (r *APIKeyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	apiKey := &dependencytrackv1alpha1.APIKey{}

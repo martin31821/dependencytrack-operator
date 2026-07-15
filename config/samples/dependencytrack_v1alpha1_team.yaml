@@ -8,5 +8,5 @@ metadata:
 spec:
   name: sample-team
   permissions:
-    - PORTFOLIO_VIEW
+    - PORTFOLIO_MANAGEMENT
     - VIEW_PORTFOLIO

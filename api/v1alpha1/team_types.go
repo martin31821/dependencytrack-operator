@@ -26,7 +26,7 @@ type TeamSpec struct {
 	Name string `json:"name,omitempty"`
 
 	// Permissions is an ordered list of permission names to assign to this team.
-	// Valid permission names include: PORTFOLIO_VIEW, PORTFOLIO_MANAGEMENT,
+	// Valid permission names include: PORTFOLIO_MANAGEMENT,
 	// VIEW_VULNERABILITY, VULNERABILITY_ANALYSIS, BOM_UPLOAD, PROJECT_CREATION,
 	// PROJECT_CREATION_UPLOAD, SYSTEM_CONFIGURATION, ACCESS_MANAGEMENT,
 	// VIEW_PORTFOLIO, PROJECT_READ, VULNERABILITY_ASSESSMENT, and others
