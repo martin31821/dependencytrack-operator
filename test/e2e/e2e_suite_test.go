@@ -42,10 +42,10 @@ var (
 	projectImage = "example.com/deptrack-operator:v0.0.1"
 )
 
-// TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
-// temporary environment to validate project changes with the purposed to be used in CI jobs.
-// The default setup requires Kind, builds/loads the Manager Docker image locally, and installs
-// CertManager.
+// TestE2E runs the end-to-end (e2e) tests for the project. These tests execute in an isolated,
+// temporary environment to validate project changes with the purpose of being used in CI jobs.
+// The default setup requires Kind, builds/loads the Manager Docker image locally, installs
+// CertManager, and deploys a real DependencyTrack instance.
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 	_, _ = fmt.Fprintf(GinkgoWriter, "Starting deptrack-operator integration test suite\n")
@@ -78,6 +78,11 @@ var _ = BeforeSuite(func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
 		}
 	}
+
+	// Deploy a real DependencyTrack instance via Helm so the operator can
+	// reconcile Team and APIKey CRs against a live backend.
+	By("installing DependencyTrack via Helm")
+	Expect(utils.InstallDependencyTrack()).To(Succeed(), "Failed to install DependencyTrack")
 })
 
 var _ = AfterSuite(func() {
@@ -86,4 +91,8 @@ var _ = AfterSuite(func() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
 		utils.UninstallCertManager()
 	}
+
+	// Clean up the DependencyTrack instance.
+	_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling DependencyTrack...\n")
+	utils.UninstallDependencyTrack()
 })

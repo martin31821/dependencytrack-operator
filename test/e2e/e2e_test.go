@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -69,6 +70,42 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+
+		By("getting DependencyTrack service URL")
+		dtURL := utils.DependencyTrackHost()
+		_, _ = fmt.Fprintf(GinkgoWriter, "DependencyTrack URL: %s\n", dtURL)
+
+		By("patching the manager deployment with the real DependencyTrack URL")
+		patchData := fmt.Sprintf(
+			`[{"op":"replace","path":"/spec/template/spec/containers/0/env/1/value","value":"%s"}]`,
+			dtURL,
+		)
+		cmd = exec.Command("kubectl", "patch", "deployment", "deptrack-operator-controller-manager", "-n", namespace,
+			"--type=json", "-p", patchData)
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to patch manager deployment with DependencyTrack URL")
+
+		By("restarting the manager pod to pick up the new URL")
+		cmd = exec.Command("kubectl", "rollout", "restart",
+			"deployment/deptrack-operator-controller-manager", "-n", namespace)
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to restart manager deployment")
+
+		By("waiting for the restarted manager pod to be ready")
+		cmd = exec.Command("kubectl", "rollout", "status", "deployment/deptrack-operator-controller-manager", "-n", namespace,
+			"--timeout", "3m")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Manager pod did not become ready after restart")
+
+		By("waiting for the manager to report 'starting manager' in logs")
+		verifyManagerStarted := func(g Gomega) {
+			cmd := exec.Command("kubectl", "logs", "deployment/deptrack-operator-controller-manager", "-n", namespace)
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(output).To(ContainSubstring("starting manager"),
+				"Manager has not started yet")
+		}
+		Eventually(verifyManagerStarted, 2*time.Minute).Should(Succeed())
 	})
 
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
@@ -138,7 +175,7 @@ var _ = Describe("Manager", Ordered, func() {
 		}
 	})
 
-	SetDefaultEventuallyTimeout(2 * time.Minute)
+	SetDefaultEventuallyTimeout(3 * time.Minute)
 	SetDefaultEventuallyPollingInterval(time.Second)
 
 	Context("Manager", func() {
@@ -268,23 +305,22 @@ subjects:
 				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
 			}
 			Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
+			// Check for a go runtime metric that is always present;
+			// controller_runtime_reconcile_total requires at least one reconcile.
 
 			By("getting the metrics by checking curl-metrics logs")
 			metricsOutput := getMetricsOutput()
 			Expect(metricsOutput).To(ContainSubstring(
-				"controller_runtime_reconcile_total",
+				"process_start_time_seconds",
 			))
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// Team permissions e2e tests
-		// These tests verify that the Team CRD and controller handle permissions
-		// correctly. They run against a cluster with no DependencyTrack instance,
-		// so the controller will fail to connect — but we can still verify that
-		// the CRD schema is accepted, the controller attempts reconciliation,
-		// conditions are set appropriately, and deletion with the finalizer works.
-		Context("Team permissions", func() {
+		// Integration tests against a real DependencyTrack instance.
+		// These tests verify that the Team CRD and controller properly
+		// create, manage, and delete teams in a live DependencyTrack backend.
+		Context("Team integration with real DependencyTrack", func() {
 			const (
 				teamWithPerms    = "team-with-permissions"
 				teamWithoutPerms = "team-without-permissions"
@@ -324,19 +360,69 @@ subjects:
 				}
 			}
 
+			// verifyTeamHasStatus checks that the Team CR has a Reconciled condition set.
 			verifyTeamHasStatus := func(teamName string) {
-				By("verifying Team has a status condition")
-				verifyTeamExists := func(g Gomega) {
+				By("verifying Team has a Reconciled condition with status True (real DependencyTrack)")
+				verifyCondition := func(g Gomega) {
 					cmd := exec.Command("kubectl", "get", "team", teamName, "-n", namespace,
-						"-o", "jsonpath={.status.conditions[0].type}")
+						"-o", "jsonpath={.status.conditions[?(@.type=='Reconciled')].status}")
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Not(BeEmpty()), "Team status conditions should be populated")
+					g.Expect(output).To(Equal("True"),
+						"Team should have Reconciled=True when talking to a real DependencyTrack")
 				}
-				Eventually(verifyTeamExists, 2*time.Minute).Should(Succeed())
+				Eventually(verifyCondition, 5*time.Minute).Should(Succeed())
 			}
 
-			It("should accept a Team CR with permissions and set a failed condition", func() {
+			// verifyTeamInDependencyTrack checks that the team exists in the real DependencyTrack API.
+			verifyTeamInDependencyTrack := func(dtName string) {
+				By(fmt.Sprintf("verifying team %q exists in DependencyTrack API", dtName))
+
+				secretJSON, err := utils.Run(exec.Command("kubectl", "get", "secret", "deptrack-credentials",
+					"-n", namespace, "-o", "json"))
+				Expect(err).NotTo(HaveOccurred())
+				var credentials struct {
+					Data map[string][]byte `json:"data"`
+				}
+				Expect(json.Unmarshal([]byte(secretJSON), &credentials)).To(Succeed())
+				Expect(credentials.Data).To(HaveKey("username"))
+				Expect(credentials.Data).To(HaveKey("password"))
+
+				// Stream credentials over stdin rather than placing them in command-line
+				// arguments or logs. The API container already includes curl.
+				stdin := bytes.NewBuffer(nil)
+				_, _ = stdin.Write(credentials.Data["username"])
+				_ = stdin.WriteByte('\n')
+				_, _ = stdin.Write(credentials.Data["password"])
+				_ = stdin.WriteByte('\n')
+				_, _ = stdin.WriteString(dtName)
+				_ = stdin.WriteByte('\n')
+
+				probeScript := `IFS= read -r username
+IFS= read -r password
+IFS= read -r team
+token=$(
+  curl --fail --silent --show-error \
+    -X POST \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "username=$username" \
+    --data-urlencode "password=$password" \
+    http://127.0.0.1:8080/api/v1/user/login
+) || exit 1
+curl --fail --silent --show-error \
+  -H "Authorization: Bearer $token" \
+  "http://127.0.0.1:8080/api/v1/team?name=$team" \
+  | grep -Fq "\"name\":\"$team\"" \
+  && echo FOUND`
+				cmd := exec.Command("kubectl", "exec", "-i", "deployment/my-dependency-track-api-server",
+					"-n", "dependency-track", "--", "sh", "-c", probeScript)
+				cmd.Stdin = stdin
+				output, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "DependencyTrack API probe failed")
+				Expect(output).To(ContainSubstring("FOUND"), "DependencyTrack API did not return the expected team")
+			}
+
+			It("should create a Team and sync it to real DependencyTrack", func() {
 				By("creating a Team with permissions")
 				teamYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
 kind: Team
@@ -344,18 +430,21 @@ metadata:
   name: %s
   namespace: %s
 spec:
-  name: test-team-permissions
+  name: test-team-with-perms
   permissions:
-    - PORTFOLIO_VIEW
+    - PORTFOLIO_MANAGEMENT
     - VIEW_PORTFOLIO
 `, teamWithPerms, namespace)
 				path := createTeam(teamWithPerms, teamYAML)
 				defer removeTemp(path)
 				applyTeam(path, false, "Failed to create Team with permissions")
 				verifyTeamHasStatus(teamWithPerms)
+
+				By("verifying the team was created in the real DependencyTrack")
+				verifyTeamInDependencyTrack("test-team-with-perms")
 			})
 
-			It("should accept a Team CR without permissions (nil)", func() {
+			It("should create a Team without permissions and sync it", func() {
 				By("creating a Team without permissions")
 				teamYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
 kind: Team
@@ -363,15 +452,18 @@ metadata:
   name: %s
   namespace: %s
 spec:
-  name: test-team-no-permissions
+  name: test-team-no-perms
 `, teamWithoutPerms, namespace)
 				path := createTeam(teamWithoutPerms, teamYAML)
 				defer removeTemp(path)
 				applyTeam(path, false, "Failed to create Team without permissions")
 				verifyTeamHasStatus(teamWithoutPerms)
+
+				By("verifying the team was created in the real DependencyTrack")
+				verifyTeamInDependencyTrack("test-team-no-perms")
 			})
 
-			It("should accept a Team CR with an empty permissions array", func() {
+			It("should create a Team with empty permissions array and sync it", func() {
 				By("creating a Team with empty permissions array")
 				teamYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
 kind: Team
@@ -379,13 +471,16 @@ metadata:
   name: %s
   namespace: %s
 spec:
-  name: test-team-empty-permissions
+  name: test-team-empty-perms
   permissions: []
 `, teamEmptyPerms, namespace)
 				path := createTeam(teamEmptyPerms, teamYAML)
 				defer removeTemp(path)
 				applyTeam(path, false, "Failed to create Team with empty permissions")
 				verifyTeamHasStatus(teamEmptyPerms)
+
+				By("verifying the team was created in the real DependencyTrack")
+				verifyTeamInDependencyTrack("test-team-empty-perms")
 			})
 
 			It("should reject a Team CR with an invalid schema", func() {
@@ -404,7 +499,7 @@ spec:
 				applyTeam(path, true, "kubectl should reject Team with invalid permissions type")
 			})
 
-			It("should handle Team deletion with the finalizer", func() {
+			It("should handle Team deletion with the finalizer against real DependencyTrack", func() {
 				const deleteTeamName = "team-for-deletion"
 
 				By("creating a Team to test deletion")
@@ -414,11 +509,15 @@ metadata:
   name: %s
   namespace: %s
 spec:
-  name: test-team-delete
+  name: test-team-for-delete
 `, deleteTeamName, namespace)
 				path := createTeam(deleteTeamName, teamYAML)
 				defer removeTemp(path)
 				applyTeam(path, false, "Failed to create Team for deletion test")
+
+				// Wait for the finalizer to be added and team to be reconciled.
+				By("waiting for the Team to be reconciled")
+				verifyTeamHasStatus(deleteTeamName)
 
 				// Wait for the finalizer to be added.
 				By("waiting for the finalizer to be added")
