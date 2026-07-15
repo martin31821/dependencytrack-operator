@@ -34,10 +34,10 @@
               curl
               go
               golangci-lint
-              helm
               helmify
               kubectl
               kubernetes-controller-tools
+              kubernetes-helm
               kustomize
               kind
               operator-sdk
