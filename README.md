@@ -47,7 +47,7 @@ metadata:
 spec:
   name: My Team
   permissions:
-    - PORTFOLIO_VIEW
+    - PORTFOLIO_MANAGEMENT
     - VIEW_PORTFOLIO
 ```
 

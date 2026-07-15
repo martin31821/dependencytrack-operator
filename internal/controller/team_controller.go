@@ -20,7 +20,6 @@ import (
 	"context"
 	"net/http"
 	"slices"
-	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -199,24 +198,30 @@ func (r *TeamReconciler) syncPermissions(
 		return err
 	}
 
-	// Build a canonical snapshot of desired permissions for status tracking.
-	desired := slices.Clone(team.Spec.Permissions)
-	slices.Sort(desired)
-
-	payload := dtapi.NewTeamPermissionsSetRequest(desired, uuid)
-	_, resp, err := apiClient.PermissionAPI.SetTeamPermissions(authCtx).TeamPermissionsSetRequest(*payload).Execute()
+	// DependencyTrack 5.0 exposes per-permission POST/DELETE operations. The
+	// generated client also contains a newer bulk PUT operation, but that is not
+	// supported by all server versions. Compute and apply a delta instead.
+	existing, _, err := apiClient.TeamAPI.GetTeam(authCtx, uuid).Execute()
 	if err != nil {
-		// DependencyTrack returns 204 No Content for this endpoint (empty body).
-		// The OpenAPI-generated code fails to decode an empty body as "unexpected EOF".
-		// The response can be nil when the decoder fails before the response is fully
-		// consumed — tolerate the error whether resp is nil or a 2xx status.
-		isUnexpectedEOF := strings.Contains(err.Error(), "unexpected EOF")
-		respIs2xx := resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300
-		if (resp == nil || respIs2xx) && isUnexpectedEOF {
-			log.Info("set team permissions (empty response, but 2xx status or no response)", "uuid", uuid, "permissions", desired)
-		} else {
-			log.Error(err, "failed to set team permissions", "uuid", uuid, "permissions", desired)
-			setCondition(team, metav1.ConditionFalse, "PermissionSyncError", "failed to sync permissions: "+err.Error())
+		log.Error(err, "failed to read team permissions", "uuid", uuid)
+		setCondition(team, metav1.ConditionFalse, "PermissionSyncError", "failed to read current permissions: "+err.Error())
+		_ = r.Status().Update(ctx, team)
+		return err
+	}
+
+	toAdd, toRemove, desired := permissionDelta(existing.Permissions, team.Spec.Permissions)
+	for _, permission := range toAdd {
+		if _, _, err := apiClient.PermissionAPI.AddPermissionToTeam(authCtx, uuid, permission).Execute(); err != nil {
+			log.Error(err, "failed to add team permission", "uuid", uuid, "permission", permission)
+			setCondition(team, metav1.ConditionFalse, "PermissionSyncError", "failed to add permission "+permission+": "+err.Error())
+			_ = r.Status().Update(ctx, team)
+			return err
+		}
+	}
+	for _, permission := range toRemove {
+		if _, _, err := apiClient.PermissionAPI.RemovePermissionFromTeam(authCtx, uuid, permission).Execute(); err != nil {
+			log.Error(err, "failed to remove team permission", "uuid", uuid, "permission", permission)
+			setCondition(team, metav1.ConditionFalse, "PermissionSyncError", "failed to remove permission "+permission+": "+err.Error())
 			_ = r.Status().Update(ctx, team)
 			return err
 		}
@@ -224,7 +229,7 @@ func (r *TeamReconciler) syncPermissions(
 
 	// Record the synced permission set (sorted, deduplicated) for observability.
 	team.Status.Permissions = joinString(desired, ",")
-	log.Info("synced team permissions", "uuid", uuid, "permissions", desired)
+	log.Info("synced team permissions", "uuid", uuid, "added", toAdd, "removed", toRemove)
 
 	if len(team.Spec.Permissions) == 0 {
 		r.Recorder.Eventf(team, "Normal", "PermissionsCleared", "Cleared all permissions for team %q", team.Spec.Name)
@@ -252,6 +257,37 @@ func setCondition(team *dependencytrackv1alpha1.Team, status metav1.ConditionSta
 		Message:            message,
 		ObservedGeneration: team.Generation,
 	})
+}
+
+// permissionDelta returns the sorted permissions to add and remove, plus a
+// canonical sorted and deduplicated snapshot of the desired permissions.
+func permissionDelta(current []dtapi.Permission, desired []string) (toAdd, toRemove, canonical []string) {
+	currentSet := make(map[string]struct{}, len(current))
+	for _, permission := range current {
+		currentSet[permission.Name] = struct{}{}
+	}
+
+	desiredSet := make(map[string]struct{}, len(desired))
+	for _, permission := range desired {
+		desiredSet[permission] = struct{}{}
+	}
+
+	for permission := range desiredSet {
+		canonical = append(canonical, permission)
+		if _, exists := currentSet[permission]; !exists {
+			toAdd = append(toAdd, permission)
+		}
+	}
+	for permission := range currentSet {
+		if _, exists := desiredSet[permission]; !exists {
+			toRemove = append(toRemove, permission)
+		}
+	}
+
+	slices.Sort(toAdd)
+	slices.Sort(toRemove)
+	slices.Sort(canonical)
+	return toAdd, toRemove, canonical
 }
 
 // joinString joins a sorted string slice with "," separators.
