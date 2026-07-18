@@ -2,4 +2,5 @@
 resources:
 - dependencytrack_v1alpha1_team.yaml
 - dependencytrack_v1alpha1_apikey.yaml
+- dependencytrack_v1alpha1_policy.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

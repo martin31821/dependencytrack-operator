@@ -1,0 +1,17 @@
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Policy
+metadata:
+  namespace: deptrack-operator-system
+  labels:
+    app.kubernetes.io/name: deptrack-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: policy-sample
+spec:
+  name: Critical Vulnerability Block
+  description: Block releases with critical or high CVSS vulnerabilities
+  priority: CRITICAL
+  failureAction: BLOCK_RELEASE
+  conditions:
+    - type: CVSS
+      comparator: GTE
+      value: "7.0"

@@ -74,6 +74,10 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
 	esac
 
+.PHONY: test-distribution
+test-distribution: ## Run distribution contract tests between kustomize and Helm chart artifacts.
+	go test ./test/distribution/ -v
+
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt ## Run the e2e tests. Expected an isolated environment using Kind.
 	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v
@@ -136,8 +140,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 .PHONY: build-installer
 build-installer: manifests generate ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	cd config/manager && kustomize edit set image controller=${IMG}
-	kustomize build config/default > dist/install.yaml
+	./hack/kustomize-build-with-image.sh "${IMG}" > dist/install.yaml
 
 ##@ Deployment
 
@@ -155,8 +158,7 @@ uninstall: manifests ## Uninstall CRDs from the K8s cluster specified in ~/.kube
 
 .PHONY: deploy
 deploy: manifests ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && kustomize edit set image controller=${IMG}
-	kustomize build config/default | kubectl apply -f -
+	./hack/kustomize-build-with-image.sh "${IMG}" | kubectl apply -f -
 
 .PHONY: undeploy
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
@@ -185,8 +187,7 @@ CHART_DIR ?= deploy/charts/dependencytrack-operator
 .PHONY: helm-chart
 helm-chart: manifests ## Generate a Helm chart from kustomize output.
 	mkdir -p $(CHART_DIR)
-	cd config/manager && kustomize edit set image controller=$(IMG)
-	kustomize build config/default | helmify $(CHART_DIR) 2>/dev/null
+	./hack/kustomize-build-with-image.sh "$(IMG)" | helmify $(CHART_DIR) 2>/dev/null
 	@# Remove duplicate hardcoded selector/template labels that conflict with helpers
 	@sed -i '/matchLabels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' $(CHART_DIR)/templates/deployment.yaml
 	@sed -i '/labels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' $(CHART_DIR)/templates/deployment.yaml

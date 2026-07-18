@@ -23,3 +23,5 @@ rules:
   - teams/status
   verbs:
   - get
+  - patch
+  - update

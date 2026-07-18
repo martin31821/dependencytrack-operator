@@ -34,8 +34,8 @@ import (
 // namespace where the project is deployed in
 const namespace = "deptrack-operator-system"
 
-// serviceAccountName created for the project
-const serviceAccountName = "deptrack-operator-controller-manager"
+// serviceAccountName is created by the packaged Helm chart.
+const serviceAccountName = "deptrack-operator"
 
 // metricsServiceName is the name of the metrics service of the project
 const metricsServiceName = "deptrack-operator-controller-manager-metrics-service"
@@ -50,10 +50,14 @@ var _ = Describe("Manager", Ordered, func() {
 	// enforce the restricted security policy to the namespace, installing CRDs,
 	// and deploying the controller.
 	BeforeAll(func() {
-		By("creating manager namespace")
-		cmd := exec.Command("kubectl", "create", "ns", namespace)
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
+		var err error
+		By("ensuring manager namespace exists")
+		cmd := exec.Command("kubectl", "get", "ns", namespace)
+		if err = cmd.Run(); err != nil {
+			cmd = exec.Command("kubectl", "create", "ns", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
+		}
 
 		By("labeling the namespace to enforce the restricted security policy")
 		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
@@ -61,41 +65,22 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
-		By("installing CRDs")
-		cmd = exec.Command("make", "install")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
+		By("copying DependencyTrack credentials into the operator namespace")
+		err = utils.CopySecretToNamespace("deptrack-credentials", "dependency-track", namespace)
+		Expect(err).NotTo(HaveOccurred(), "Failed to copy DependencyTrack credentials")
 
-		By("deploying the controller-manager")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
-
-		By("getting DependencyTrack service URL")
+		projectDir, err := utils.GetProjectDir()
+		Expect(err).NotTo(HaveOccurred(), "Failed to locate project directory")
 		dtURL := utils.DependencyTrackHost()
 		_, _ = fmt.Fprintf(GinkgoWriter, "DependencyTrack URL: %s\n", dtURL)
 
-		By("patching the manager deployment with the real DependencyTrack URL")
-		patchData := fmt.Sprintf(
-			`[{"op":"replace","path":"/spec/template/spec/containers/0/env/1/value","value":"%s"}]`,
-			dtURL,
-		)
-		cmd = exec.Command("kubectl", "patch", "deployment", "deptrack-operator-controller-manager", "-n", namespace,
-			"--type=json", "-p", patchData)
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to patch manager deployment with DependencyTrack URL")
+		By("installing the packaged operator Helm chart")
+		err = utils.InstallOperatorHelm(projectDir, projectImage, dtURL, namespace)
+		Expect(err).NotTo(HaveOccurred(), "Failed to install the operator Helm chart")
 
-		By("restarting the manager pod to pick up the new URL")
-		cmd = exec.Command("kubectl", "rollout", "restart",
-			"deployment/deptrack-operator-controller-manager", "-n", namespace)
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to restart manager deployment")
-
-		By("waiting for the restarted manager pod to be ready")
-		cmd = exec.Command("kubectl", "rollout", "status", "deployment/deptrack-operator-controller-manager", "-n", namespace,
-			"--timeout", "3m")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Manager pod did not become ready after restart")
+		By("exercising the packaged operator Helm upgrade path")
+		err = utils.UpgradeOperatorHelm(projectDir, namespace)
+		Expect(err).NotTo(HaveOccurred(), "Failed to upgrade the operator Helm chart")
 
 		By("waiting for the manager to report 'starting manager' in logs")
 		verifyManagerStarted := func(g Gomega) {
@@ -106,6 +91,14 @@ var _ = Describe("Manager", Ordered, func() {
 				"Manager has not started yet")
 		}
 		Eventually(verifyManagerStarted, 2*time.Minute).Should(Succeed())
+
+		By("recording the controller-manager pod name for failure diagnostics")
+		podOutput, err := utils.Run(exec.Command("kubectl", "get", "pods",
+			"-l", "control-plane=controller-manager", "-n", namespace,
+			"-o", "jsonpath={.items[0].metadata.name}"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(podOutput).NotTo(BeEmpty())
+		controllerPodName = podOutput
 	})
 
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
@@ -119,13 +112,8 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName)
 		_, _ = utils.Run(cmd)
 
-		By("undeploying the controller-manager")
-		cmd = exec.Command("make", "undeploy")
-		_, _ = utils.Run(cmd)
-
-		By("uninstalling CRDs")
-		cmd = exec.Command("make", "uninstall")
-		_, _ = utils.Run(cmd)
+		By("uninstalling the packaged operator Helm release")
+		utils.UninstallOperatorHelm(namespace)
 
 		By("removing manager namespace")
 		cmd = exec.Command("kubectl", "delete", "ns", namespace)
@@ -544,6 +532,438 @@ spec:
 					g.Expect(err).To(HaveOccurred(), "Team should be deleted")
 				}
 				Eventually(verifyTeamGone, 2*time.Minute).Should(Succeed())
+			})
+		})
+
+		// --- Policy integration tests ---
+
+		Context("Policy integration with real DependencyTrack", func() {
+			const (
+				policyWithCondition = "policy-with-condition"
+				policyWithPURL      = "policy-with-purl"
+				policyForDeletion   = "policy-for-deletion"
+				policyLifecycle     = "policy-lifecycle"
+			)
+
+			AfterEach(func() {
+				// Clean up test policies after each test.
+				for _, name := range []string{
+					policyWithCondition, policyWithPURL, policyForDeletion, policyLifecycle,
+				} {
+					By(fmt.Sprintf("deleting test policy %q", name))
+					cmd := exec.Command("kubectl", "delete", "policy", name, "-n", namespace)
+					_, _ = utils.Run(cmd)
+				}
+			})
+
+			// createPolicy writes the given YAML to a temp file and applies it via kubectl.
+			// Returns the temp file path so the caller can defer cleanup.
+			createPolicy := func(policyName, yaml string) string {
+				tmpFile, err := os.CreateTemp("", fmt.Sprintf("policy-%s-*.yaml", policyName))
+				Expect(err).NotTo(HaveOccurred())
+				_, err = tmpFile.WriteString(yaml)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tmpFile.Close()).NotTo(HaveOccurred())
+				return tmpFile.Name()
+			}
+
+			// removeTemp cleans up a temp file, ignoring errors (not actionable in tests).
+			removeTemp := func(path string) { _ = os.Remove(path) }
+
+			// applyPolicy applies a Policy YAML and optionally expects failure.
+			applyPolicy := func(path string, expectFail bool, errMsg string) {
+				cmd := exec.Command("kubectl", "apply", "-f", path)
+				_, err := utils.Run(cmd)
+				if expectFail {
+					Expect(err).To(HaveOccurred(), errMsg)
+				} else {
+					Expect(err).NotTo(HaveOccurred(), errMsg)
+				}
+			}
+
+			// verifyPolicyHasStatus checks that the Policy CR has a Ready condition set.
+			verifyPolicyHasStatus := func(policyName string) {
+				By(fmt.Sprintf("verifying Policy %q has a Ready condition with status True (real DependencyTrack)", policyName))
+				verifyCondition := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "policy", policyName, "-n", namespace, "-o",
+						"jsonpath={range .status.conditions[?(@.type=='Ready')]}{.status}|{.reason}|{.message}{end}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(HavePrefix("True|"),
+						"Policy should have Ready=True; observed condition: %s", output)
+				}
+				Eventually(verifyCondition, 5*time.Minute).Should(Succeed())
+			}
+
+			// verifyPolicyHasUUID checks that the Policy CR has a confirmed UUID.
+			verifyPolicyHasUUID := func(policyName string) {
+				By(fmt.Sprintf("verifying Policy %q has a confirmed UUID from DependencyTrack", policyName))
+				verifyUUID := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "policy", policyName, "-n", namespace, "-o",
+						"jsonpath={.status.uuid}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(MatchRegexp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"),
+						"Policy should have a valid UUID from DependencyTrack")
+				}
+				Eventually(verifyUUID, 5*time.Minute).Should(Succeed())
+			}
+
+			// runPolicyAPI executes a credential-safe probe in the DependencyTrack API pod.
+			// Credentials and dynamic inputs are streamed over stdin and are never placed
+			// in command arguments or diagnostic output.
+			runPolicyAPI := func(uuid string, inputs []string, script string) string {
+				secretJSON, err := utils.Run(exec.Command("kubectl", "get", "secret", "deptrack-credentials",
+					"-n", namespace, "-o", "json"))
+				Expect(err).NotTo(HaveOccurred())
+				var credentials struct {
+					Data map[string][]byte `json:"data"`
+				}
+				Expect(json.Unmarshal([]byte(secretJSON), &credentials)).To(Succeed())
+				Expect(credentials.Data).To(HaveKey("username"))
+				Expect(credentials.Data).To(HaveKey("password"))
+
+				stdin := bytes.NewBuffer(nil)
+				_, _ = stdin.Write(credentials.Data["username"])
+				_ = stdin.WriteByte('\n')
+				_, _ = stdin.Write(credentials.Data["password"])
+				_ = stdin.WriteByte('\n')
+				_, _ = stdin.WriteString(uuid)
+				_ = stdin.WriteByte('\n')
+				for _, input := range inputs {
+					_, _ = stdin.WriteString(input)
+					_ = stdin.WriteByte('\n')
+				}
+
+				cmd := exec.Command("kubectl", "exec", "-i", "deployment/my-dependency-track-api-server",
+					"-n", "dependency-track", "--", "sh", "-c", script)
+				cmd.Stdin = stdin
+				output, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "DependencyTrack API probe failed")
+				return output
+			}
+
+			// verifyPolicyInDependencyTrack checks that the policy exists in the real DependencyTrack API.
+			verifyPolicyInDependencyTrack := func(policyName string) {
+				By(fmt.Sprintf("verifying policy %q exists in DependencyTrack API", policyName))
+
+				// Get the UUID from the Policy CR.
+				uuidJSON, err := utils.Run(exec.Command("kubectl", "get", "policy", policyName, "-n", namespace,
+					"-o", "jsonpath={.status.uuid}"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(uuidJSON).To(MatchRegexp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"))
+
+				// Stream credentials over stdin. The API container already includes curl.
+				secretJSON, err := utils.Run(exec.Command("kubectl", "get", "secret", "deptrack-credentials",
+					"-n", namespace, "-o", "json"))
+				Expect(err).NotTo(HaveOccurred())
+				var credentials struct {
+					Data map[string][]byte `json:"data"`
+				}
+				Expect(json.Unmarshal([]byte(secretJSON), &credentials)).To(Succeed())
+				Expect(credentials.Data).To(HaveKey("username"))
+				Expect(credentials.Data).To(HaveKey("password"))
+
+				stdin := bytes.NewBuffer(nil)
+				_, _ = stdin.Write(credentials.Data["username"])
+				_ = stdin.WriteByte('\n')
+				_, _ = stdin.Write(credentials.Data["password"])
+				_ = stdin.WriteByte('\n')
+				_, _ = stdin.WriteString(uuidJSON)
+				_ = stdin.WriteByte('\n')
+
+				probeScript := `IFS= read -r username
+IFS= read -r password
+IFS= read -r uuid
+token=$(
+  curl --fail --silent --show-error \
+    -X POST \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "username=$username" \
+    --data-urlencode "password=$password" \
+    http://127.0.0.1:8080/api/v1/user/login
+) || exit 1
+curl --fail --silent --show-error \
+  -H "Authorization: Bearer $token" \
+  "http://127.0.0.1:8080/api/v1/policy/$uuid" \
+  | grep -q '"uuid"' \
+  && echo FOUND`
+				cmd := exec.Command("kubectl", "exec", "-i", "deployment/my-dependency-track-api-server",
+					"-n", "dependency-track", "--", "sh", "-c", probeScript)
+				cmd.Stdin = stdin
+				output, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "DependencyTrack API probe failed")
+				Expect(output).To(ContainSubstring("FOUND"), "DependencyTrack API did not return the expected policy")
+			}
+
+			It("should create a global Policy with an inline license condition and sync it to DependencyTrack", func() {
+				By("creating a Policy with one license condition")
+				policyYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Policy
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  name: test-policy-license
+  priority: CRITICAL
+  failureAction: BLOCK_RELEASE
+  conditions:
+    - type: LICENSE
+      comparator: EQ
+      value: MIT
+`, policyWithCondition, namespace)
+				path := createPolicy(policyWithCondition, policyYAML)
+				defer removeTemp(path)
+				applyPolicy(path, false, "Failed to create Policy with license condition")
+				verifyPolicyHasStatus(policyWithCondition)
+				verifyPolicyHasUUID(policyWithCondition)
+
+				By("verifying the policy was created in the real DependencyTrack")
+				verifyPolicyInDependencyTrack(policyWithCondition)
+			})
+
+			It("should create a Policy with a package URL condition and sync it", func() {
+				By("creating a Policy with a package URL condition")
+				policyYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Policy
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  name: test-policy-purl
+  priority: HIGH
+  failureAction: BLOCK_DEPLOY
+  conditions:
+    - type: PURL
+      comparator: EQ
+      value: pkg:maven/org.example/demo@1.0.0
+`, policyWithPURL, namespace)
+				path := createPolicy(policyWithPURL, policyYAML)
+				defer removeTemp(path)
+				applyPolicy(path, false, "Failed to create Policy with package URL condition")
+				verifyPolicyHasStatus(policyWithPURL)
+				verifyPolicyHasUUID(policyWithPURL)
+			})
+
+			It("should reject a Policy CR with an invalid enum value", func() {
+				By("creating a Policy with invalid enum value")
+				badYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Policy
+metadata:
+  name: policy-invalid-enum
+  namespace: %s
+spec:
+  name: test-invalid
+  priority: INVALID_PRIORITY
+  failureAction: BLOCK_RELEASE
+  conditions:
+    - type: CVSS
+      comparator: GTE
+      value: "7.0"
+`, namespace)
+				path := createPolicy("invalid", badYAML)
+				defer removeTemp(path)
+				applyPolicy(path, true, "kubectl should reject Policy with invalid priority enum")
+			})
+
+			It("should converge one UUID-owned Policy through drift, update, and deletion", func() {
+				const initialName = "e2e-policy-lifecycle-initial"
+				policyYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Policy
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  name: %s
+  priority: HIGH
+  failureAction: REPORT
+  conditions:
+    - type: LICENSE
+      comparator: EQ
+      value: MIT
+`, policyLifecycle, namespace, initialName)
+				path := createPolicy(policyLifecycle, policyYAML)
+				defer removeTemp(path)
+				applyPolicy(path, false, "Failed to create lifecycle Policy")
+				verifyPolicyHasStatus(policyLifecycle)
+				verifyPolicyHasUUID(policyLifecycle)
+
+				policyUUID, err := utils.Run(exec.Command("kubectl", "get", "policy", policyLifecycle,
+					"-n", namespace, "-o", "jsonpath={.status.uuid}"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(policyUUID).To(MatchRegexp("^[0-9a-f-]{36}$"))
+
+				fetchPolicyScript := `IFS= read -r username
+IFS= read -r password
+IFS= read -r uuid
+token=$(
+  curl --fail --silent --show-error \
+    -X POST \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "username=$username" \
+    --data-urlencode "password=$password" \
+    http://127.0.0.1:8080/api/v1/user/login
+) || exit 1
+curl --fail --silent --show-error \
+  -H "Authorization: Bearer $token" \
+  "http://127.0.0.1:8080/api/v1/policy/$uuid"`
+
+				By("verifying the initial policy and inline condition through the remote UUID endpoint")
+				remotePolicy := runPolicyAPI(policyUUID, nil, fetchPolicyScript)
+				Expect(remotePolicy).To(ContainSubstring(`"uuid":"` + policyUUID + `"`))
+				Expect(remotePolicy).To(ContainSubstring(`"name":"` + initialName + `"`))
+				Expect(remotePolicy).To(ContainSubstring(`"global":true`))
+				Expect(remotePolicy).To(ContainSubstring(`"violationState":"WARN"`))
+				Expect(remotePolicy).To(ContainSubstring(`"subject":"LICENSE"`))
+				Expect(remotePolicy).To(ContainSubstring(`"operator":"IS"`))
+				Expect(remotePolicy).To(ContainSubstring(`"value":"MIT"`))
+
+				By("introducing out-of-band field drift through the DependencyTrack API")
+				driftScript := `IFS= read -r username
+IFS= read -r password
+IFS= read -r uuid
+token=$(
+  curl --fail --silent --show-error \
+    -X POST \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "username=$username" \
+    --data-urlencode "password=$password" \
+    http://127.0.0.1:8080/api/v1/user/login
+) || exit 1
+payload=$(
+  printf \
+    '{"uuid":"%s","name":"out-of-band-drift","global":true,"operator":"ANY","violationState":"INFO"}' \
+    "$uuid"
+)
+curl --fail --silent --show-error \
+  -X POST \
+  -H "Authorization: Bearer $token" \
+  -H "Content-Type: application/json" \
+  --data "$payload" \
+  http://127.0.0.1:8080/api/v1/policy >/dev/null`
+				_ = runPolicyAPI(policyUUID, nil, driftScript)
+				driftedPolicy := runPolicyAPI(policyUUID, nil, fetchPolicyScript)
+				Expect(driftedPolicy).To(ContainSubstring(`"name":"out-of-band-drift"`))
+				Expect(driftedPolicy).To(ContainSubstring(`"violationState":"INFO"`))
+
+				By("triggering reconciliation and waiting for declared fields to repair")
+				_, err = utils.Run(exec.Command("kubectl", "annotate", "policy", policyLifecycle,
+					"-n", namespace, "e2e.dependencytrack.mko.dev/drift-trigger="+fmt.Sprint(time.Now().UnixNano()),
+					"--overwrite"))
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(func(g Gomega) {
+					repaired := runPolicyAPI(policyUUID, nil, fetchPolicyScript)
+					g.Expect(repaired).To(ContainSubstring(`"name":"` + initialName + `"`))
+					g.Expect(repaired).To(ContainSubstring(`"violationState":"WARN"`))
+				}, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+				By("updating the declared Policy while preserving remote ownership")
+				const updatedName = "e2e-policy-lifecycle-updated"
+				updatedYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Policy
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  name: %s
+  priority: CRITICAL
+  failureAction: BLOCK_RELEASE
+  conditions:
+    - type: LICENSE
+      comparator: EQ
+      value: Apache-2.0
+`, policyLifecycle, namespace, updatedName)
+				updatedPath := createPolicy(policyLifecycle+"-updated", updatedYAML)
+				defer removeTemp(updatedPath)
+				applyPolicy(updatedPath, false, "Failed to update lifecycle Policy")
+				Eventually(func(g Gomega) {
+					currentUUID, getErr := utils.Run(exec.Command("kubectl", "get", "policy", policyLifecycle,
+						"-n", namespace, "-o", "jsonpath={.status.uuid}"))
+					g.Expect(getErr).NotTo(HaveOccurred())
+					g.Expect(currentUUID).To(Equal(policyUUID))
+					updated := runPolicyAPI(policyUUID, nil, fetchPolicyScript)
+					g.Expect(updated).To(ContainSubstring(`"name":"` + updatedName + `"`))
+					g.Expect(updated).To(ContainSubstring(`"violationState":"FAIL"`))
+					g.Expect(updated).To(ContainSubstring(`"subject":"LICENSE"`))
+					g.Expect(updated).To(ContainSubstring(`"operator":"IS"`))
+					g.Expect(updated).To(ContainSubstring(`"value":"Apache-2.0"`))
+				}, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+				By("deleting the Kubernetes Policy and confirming remote UUID cleanup")
+				_, err = utils.Run(exec.Command("kubectl", "delete", "policy", policyLifecycle,
+					"-n", namespace, "--wait=false"))
+				Expect(err).NotTo(HaveOccurred())
+				remoteStatusScript := `IFS= read -r username
+IFS= read -r password
+IFS= read -r uuid
+token=$(
+  curl --fail --silent --show-error \
+    -X POST \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "username=$username" \
+    --data-urlencode "password=$password" \
+    http://127.0.0.1:8080/api/v1/user/login
+) || exit 1
+curl --silent --output /dev/null --write-out '%{http_code}' \
+  -H "Authorization: Bearer $token" \
+  "http://127.0.0.1:8080/api/v1/policy/$uuid"`
+				Eventually(func() string {
+					return runPolicyAPI(policyUUID, nil, remoteStatusScript)
+				}, 2*time.Minute, 5*time.Second).Should(Equal("404"))
+				Eventually(func() error {
+					return exec.Command("kubectl", "get", "policy", policyLifecycle, "-n", namespace).Run()
+				}, 2*time.Minute, 5*time.Second).Should(HaveOccurred())
+			})
+
+			It("should handle Policy deletion with the finalizer against real DependencyTrack", func() {
+				By("creating a Policy to test deletion")
+				policyYAML := fmt.Sprintf(`apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Policy
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  name: test-policy-for-delete
+  priority: MEDIUM
+  failureAction: REPORT
+  conditions:
+    - type: LICENSE
+      comparator: EQ
+      value: BSD-3-Clause
+`, policyForDeletion, namespace)
+				path := createPolicy(policyForDeletion, policyYAML)
+				defer removeTemp(path)
+				applyPolicy(path, false, "Failed to create Policy for deletion test")
+
+				// Wait for the finalizer to be added and policy to be reconciled.
+				By("waiting for the Policy to be reconciled")
+				verifyPolicyHasStatus(policyForDeletion)
+
+				// Wait for the finalizer to be added.
+				By("waiting for the finalizer to be added")
+				verifyFinalizerExists := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "policy", policyForDeletion, "-n", namespace,
+						"-o", "jsonpath={.metadata.finalizers}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(ContainSubstring("dependencytrack.mko.dev/policy-finalizer"))
+				}
+				Eventually(verifyFinalizerExists, 1*time.Minute).Should(Succeed())
+
+				// Delete the Policy.
+				By("deleting the Policy")
+				deleteCmd := exec.Command("kubectl", "delete", "policy", policyForDeletion, "-n", namespace)
+				_, delErr := utils.Run(deleteCmd)
+				Expect(delErr).NotTo(HaveOccurred(), "Failed to delete Policy")
+
+				// Wait for the Policy to be fully removed (finalizer cleanup completes).
+				By("waiting for the Policy to be fully removed")
+				verifyPolicyGone := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "policy", policyForDeletion, "-n", namespace)
+					_, err := utils.Run(cmd)
+					g.Expect(err).To(HaveOccurred(), "Policy should be deleted")
+				}
+				Eventually(verifyPolicyGone, 2*time.Minute).Should(Succeed())
 			})
 		})
 	})

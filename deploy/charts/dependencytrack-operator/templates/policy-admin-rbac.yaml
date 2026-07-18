@@ -1,27 +1,19 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "dependencytrack-operator.fullname" . }}-apikey-editor-role
+  name: {{ include "dependencytrack-operator.fullname" . }}-policy-admin-role
   labels:
   {{- include "dependencytrack-operator.labels" . | nindent 4 }}
 rules:
 - apiGroups:
   - dependencytrack.mko.dev
   resources:
-  - apikeys
+  - policies
   verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
+  - '*'
 - apiGroups:
   - dependencytrack.mko.dev
   resources:
-  - apikeys/status
+  - policies/status
   verbs:
   - get
-  - patch
-  - update

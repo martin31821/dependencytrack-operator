@@ -44,9 +44,14 @@ var (
 
 // TestE2E runs the end-to-end (e2e) tests for the project. These tests execute in an isolated,
 // temporary environment to validate project changes with the purpose of being used in CI jobs.
-// The default setup requires Kind, builds/loads the Manager Docker image locally, installs
-// CertManager, and deploys a real DependencyTrack instance.
+// The setup requires KIND_CLUSTER to opt in because it builds and loads a manager image,
+// installs cluster dependencies, and tears the selected Kind cluster down. The Makefile's
+// test-e2e target supplies KIND_CLUSTER; ordinary `go test ./...` runs skip this package.
 func TestE2E(t *testing.T) {
+	if os.Getenv("KIND_CLUSTER") == "" {
+		t.Skip("set KIND_CLUSTER or run `make test-e2e` to execute the e2e suite")
+	}
+
 	RegisterFailHandler(Fail)
 	_, _ = fmt.Fprintf(GinkgoWriter, "Starting deptrack-operator integration test suite\n")
 	RunSpecs(t, "e2e suite")

@@ -20,6 +20,7 @@ rules:
   - dependencytrack.mko.dev
   resources:
   - apikeys
+  - policies
   - teams
   verbs:
   - create
@@ -33,6 +34,7 @@ rules:
   - dependencytrack.mko.dev
   resources:
   - apikeys/finalizers
+  - policies/finalizers
   - teams/finalizers
   verbs:
   - update
@@ -40,6 +42,7 @@ rules:
   - dependencytrack.mko.dev
   resources:
   - apikeys/status
+  - policies/status
   - teams/status
   verbs:
   - get

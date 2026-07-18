@@ -17,9 +17,12 @@ limitations under the License.
 package utils
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -361,14 +364,40 @@ func InstallDependencyTrack() error {
 		return fmt.Errorf("generate KEK: %w", err)
 	}
 
-	// Install DependencyTrack with the KEK.
+	// Pass database credentials and the generated KEK through a mode-0600
+	// values file so they never appear in process arguments or test logs.
+	secretValues, err := json.Marshal(map[string]any{
+		"database": map[string]any{
+			"username": "dtrack",
+			"password": "dtrack123",
+		},
+		"secretManagement": map[string]any{
+			"database": map[string]any{
+				"kek": map[string]any{"value": strings.TrimSpace(keq)},
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("encode DependencyTrack Helm values: %w", err)
+	}
+	valuesFile, err := os.CreateTemp("", "dependency-track-values-*.json")
+	if err != nil {
+		return fmt.Errorf("create DependencyTrack Helm values: %w", err)
+	}
+	defer func() { _ = os.Remove(valuesFile.Name()) }()
+	if _, err := valuesFile.Write(secretValues); err != nil {
+		_ = valuesFile.Close()
+		return fmt.Errorf("write DependencyTrack Helm values: %w", err)
+	}
+	if err := valuesFile.Close(); err != nil {
+		return fmt.Errorf("close DependencyTrack Helm values: %w", err)
+	}
+
 	installCmd := exec.Command("helm", "install", "my-dependency-track",
 		"dependencytrack/dependency-track",
 		"--version", "2.0.0-rc.2",
 		"--namespace", "dependency-track",
-		"--set", "secretManagement.database.kek.value="+keq,
-		"--set", "database.username=dtrack",
-		"--set", "database.password=dtrack123",
+		"--values", valuesFile.Name(),
 	)
 	_, err = Run(installCmd)
 	if err != nil {
@@ -400,13 +429,44 @@ func InstallDependencyTrack() error {
 			"--output", "/dev/null", "http://127.0.0.1:8080/api/version")
 		if _, err := Run(checkCmd); err == nil {
 			_, _ = fmt.Fprintf(GinkgoWriter, "DependencyTrack API is ready.\\n")
-			return nil
+			break
 		} else {
 			lastErr = err
 		}
 		time.Sleep(1 * time.Second)
 	}
-	return fmt.Errorf("DependencyTrack API not ready after 2 minutes: %w", lastErr)
+	if lastErr != nil {
+		return fmt.Errorf("DependencyTrack API not ready after 2 minutes: %w", lastErr)
+	}
+
+	// Create the deptrack-credentials secret so the operator controller can
+	// authenticate with DependencyTrack. The DT Helm chart creates an admin
+	// user; we mirror its credentials in a secret the operator reads.
+	_, _ = fmt.Fprintf(GinkgoWriter, "Creating deptrack-credentials secret...\\n")
+	credsManifest := `apiVersion: v1
+kind: Secret
+metadata:
+  name: deptrack-credentials
+  namespace: dependency-track
+type: Opaque
+stringData:
+  username: admin
+  password: admin`
+	credsTmp, err := os.CreateTemp("", "dt-creds-*.yaml")
+	if err != nil {
+		return fmt.Errorf("create creds temp file: %w", err)
+	}
+	_, _ = credsTmp.WriteString(credsManifest)
+	if err := credsTmp.Close(); err != nil {
+		return fmt.Errorf("close creds manifest: %w", err)
+	}
+	_, err = Run(exec.Command("kubectl", "apply", "-f", credsTmp.Name()))
+	if err != nil {
+		_ = os.Remove(credsTmp.Name())
+		return fmt.Errorf("apply credentials secret: %w", err)
+	}
+	_ = os.Remove(credsTmp.Name())
+	return nil
 }
 
 // UninstallDependencyTrack removes the DependencyTrack Helm release and namespace.
@@ -426,6 +486,92 @@ func UninstallDependencyTrack() {
 	_, _ = Run(removeCmd)
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "DependencyTrack uninstalled.\\n")
+}
+
+// CopySecretToNamespace copies a Secret without exposing its data in command
+// arguments or test logs. Server-assigned metadata is removed before applying
+// the copy in the target namespace.
+func CopySecretToNamespace(name, sourceNamespace, targetNamespace string) error {
+	getCmd := exec.Command("kubectl", "get", "secret", name,
+		"--namespace", sourceNamespace, "--output", "json")
+	secretJSON, err := getCmd.Output()
+	if err != nil {
+		return fmt.Errorf("get secret %s/%s: %w", sourceNamespace, name, err)
+	}
+
+	var secret map[string]any
+	if err := json.Unmarshal(secretJSON, &secret); err != nil {
+		return fmt.Errorf("decode secret %s/%s: %w", sourceNamespace, name, err)
+	}
+	metadata, ok := secret["metadata"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("secret %s/%s has no metadata", sourceNamespace, name)
+	}
+	metadata["namespace"] = targetNamespace
+	for _, field := range []string{
+		"creationTimestamp", "managedFields", "resourceVersion", "selfLink", "uid",
+	} {
+		delete(metadata, field)
+	}
+
+	copyJSON, err := json.Marshal(secret)
+	if err != nil {
+		return fmt.Errorf("encode secret copy %s/%s: %w", targetNamespace, name, err)
+	}
+	applyCmd := exec.Command("kubectl", "apply", "--filename", "-")
+	applyCmd.Stdin = bytes.NewReader(copyJSON)
+	if _, err := Run(applyCmd); err != nil {
+		return fmt.Errorf("apply secret %s/%s: %w", targetNamespace, name, err)
+	}
+	return nil
+}
+
+// InstallOperatorHelm installs the packaged operator chart with the locally
+// built image and live Dependency-Track endpoint used by the e2e suite.
+func InstallOperatorHelm(projectDir, image, deptrackURL, namespace string) error {
+	repository, tag, err := splitImage(image)
+	if err != nil {
+		return err
+	}
+	chartPath := filepath.Join(projectDir, "deploy", "charts", "dependencytrack-operator")
+	cmd := exec.Command("helm", "install", "deptrack-operator", chartPath,
+		"--namespace", namespace,
+		"--set", "fullnameOverride=deptrack-operator",
+		"--set", "controllerManager.manager.image.repository="+repository,
+		"--set", "controllerManager.manager.image.tag="+tag,
+		"--set", "controllerManager.manager.image.pullPolicy=IfNotPresent",
+		"--set", "controllerManager.manager.env.deptrackUrl="+deptrackURL,
+		"--set", "controllerManager.manager.env.deptrackCredentialsSecret=deptrack-credentials",
+		"--wait", "--timeout", "3m")
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("helm install operator: %w", err)
+	}
+	return nil
+}
+
+// UpgradeOperatorHelm exercises the packaged chart upgrade path while retaining
+// the values used for the initial installation.
+func UpgradeOperatorHelm(projectDir, namespace string) error {
+	chartPath := filepath.Join(projectDir, "deploy", "charts", "dependencytrack-operator")
+	cmd := exec.Command("helm", "upgrade", "deptrack-operator", chartPath,
+		"--namespace", namespace, "--reuse-values", "--wait", "--timeout", "3m")
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("helm upgrade operator: %w", err)
+	}
+	return nil
+}
+
+// UninstallOperatorHelm removes the operator Helm release.
+func UninstallOperatorHelm(namespace string) {
+	_, _ = Run(exec.Command("helm", "uninstall", "deptrack-operator", "--namespace", namespace))
+}
+
+func splitImage(image string) (string, string, error) {
+	separator := strings.LastIndex(image, ":")
+	if separator <= strings.LastIndex(image, "/") || separator == len(image)-1 {
+		return "", "", fmt.Errorf("image %q must include a tag", image)
+	}
+	return image[:separator], image[separator+1:], nil
 }
 
 // DependencyTrackHost returns the Kubernetes service hostname for the

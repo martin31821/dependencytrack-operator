@@ -28,4 +28,7 @@ resources:
 - team_admin_role.yaml
 - team_editor_role.yaml
 - team_viewer_role.yaml
+- policy_admin_role.yaml
+- policy_editor_role.yaml
+- policy_viewer_role.yaml
 

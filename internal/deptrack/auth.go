@@ -33,6 +33,12 @@ import (
 // DependencyTrack tokens are valid for 24 h; we refresh early to avoid expiry mid-operation.
 const tokenTTL = time.Hour
 
+// ClientProviderInterface abstracts DependencyTrack authentication so
+// tests can inject a mock provider without depending on Kubernetes.
+type ClientProviderInterface interface {
+	Get(ctx context.Context) (context.Context, *dtapi.APIClient, error)
+}
+
 // ClientProvider authenticates with DependencyTrack and caches the bearer token.
 // It is safe for concurrent use.
 type ClientProvider struct {

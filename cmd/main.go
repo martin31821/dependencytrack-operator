@@ -251,6 +251,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "APIKey")
 		os.Exit(1)
 	}
+	if err := (&controller.PolicyReconciler{
+		Client:     mgr.GetClient(),
+		Scheme:     mgr.GetScheme(),
+		Recorder:   mgr.GetEventRecorderFor("policy-controller"),
+		DTProvider: dtProvider,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Policy")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {

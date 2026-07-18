@@ -1,9 +1,7 @@
 # This rule is not used by the project deptrack-operator itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants read-only access to dependencytrack.mko.dev resources.
-# This role is intended for users who need visibility into these resources
-# without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
+# Provides read-only access to teams within a namespace.
 
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
