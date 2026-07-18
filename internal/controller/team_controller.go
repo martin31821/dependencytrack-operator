@@ -206,11 +206,14 @@ func (r *TeamReconciler) syncPermissions(
 	payload := dtapi.NewTeamPermissionsSetRequest(desired, uuid)
 	_, resp, err := apiClient.PermissionAPI.SetTeamPermissions(authCtx).TeamPermissionsSetRequest(*payload).Execute()
 	if err != nil {
-		// DependencyTrack sometimes returns 2xx with an empty body on success.
+		// DependencyTrack returns 204 No Content for this endpoint (empty body).
 		// The OpenAPI-generated code fails to decode an empty body as "unexpected EOF".
-		// Treat a 2xx response with this specific decode error as success.
-		if resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 && strings.Contains(err.Error(), "unexpected EOF") {
-			log.Info("set team permissions (empty response, but 2xx status)", "uuid", uuid, "permissions", desired)
+		// The response can be nil when the decoder fails before the response is fully
+		// consumed — tolerate the error whether resp is nil or a 2xx status.
+		isUnexpectedEOF := strings.Contains(err.Error(), "unexpected EOF")
+		respIs2xx := resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300
+		if (resp == nil || respIs2xx) && isUnexpectedEOF {
+			log.Info("set team permissions (empty response, but 2xx status or no response)", "uuid", uuid, "permissions", desired)
 		} else {
 			log.Error(err, "failed to set team permissions", "uuid", uuid, "permissions", desired)
 			setCondition(team, metav1.ConditionFalse, "PermissionSyncError", "failed to sync permissions: "+err.Error())
