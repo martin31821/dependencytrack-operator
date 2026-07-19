@@ -43,45 +43,43 @@ import (
 
 var _ = Describe("Policy API integration", func() {
 	Context("CRD schema validation", func() {
-		It("rejects a Policy with an invalid Priority enum value", func() {
+		It("rejects a Policy with an invalid Operator enum value", func() {
 			invalidPolicy := &dependencytrackv1alpha1.Policy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "invalid-policy-enum",
+					Name:      "invalid-policy-operator",
 					Namespace: testNS,
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Bad Priority",
-					Priority:      dependencytrackv1alpha1.Priority("INVALID"),
-					FailureAction: dependencytrackv1alpha1.FailureActionBlockRelease,
+					Name:           "Bad Policy Operator",
+					Operator:       dependencytrackv1alpha1.PolicyOperator("NONE"),
+					ViolationState: dependencytrackv1alpha1.ViolationStateFail,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
 						{
-							Type:       dependencytrackv1alpha1.ConditionTypeCVSS,
-							Comparator: dependencytrackv1alpha1.OpGTE,
-							Value:      testCVSSSeven,
+							Subject:  dependencytrackv1alpha1.PolicyConditionSubjectSeverity,
+							Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs,
+							Value:    "CRITICAL",
 						},
 					},
 				},
 			}
-
-			// envtest's API server validates against the CRD schema.
 			Expect(k8sClient.Create(ctx, invalidPolicy)).Should(HaveOccurred())
 		})
 
-		It("rejects a Policy with an invalid FailureAction enum value", func() {
+		It("rejects a Policy with an invalid ViolationState enum value", func() {
 			invalidPolicy := &dependencytrackv1alpha1.Policy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "invalid-failure-action",
+					Name:      "invalid-violation-state",
 					Namespace: testNS,
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Bad Failure Action",
-					Priority:      dependencytrackv1alpha1.PriorityCritical,
-					FailureAction: dependencytrackv1alpha1.FailureAction("NOOP"),
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Bad Violation State",
+					ViolationState: dependencytrackv1alpha1.ViolationState("NOOP"),
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
 						{
-							Type:       dependencytrackv1alpha1.ConditionTypeSeverity,
-							Comparator: dependencytrackv1alpha1.OpGT,
-							Value:      "5.0",
+							Subject:  dependencytrackv1alpha1.PolicyConditionSubjectSeverity,
+							Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs,
+							Value:    "5.0",
 						},
 					},
 				},
@@ -123,14 +121,14 @@ var _ = Describe("Policy API integration", func() {
 					Namespace: testNS,
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Integration Policy",
-					Priority:      dependencytrackv1alpha1.PriorityCritical,
-					FailureAction: dependencytrackv1alpha1.FailureActionBlockRelease,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAll,
+					Name:           "Integration Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateFail,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
 						{
-							Type:       dependencytrackv1alpha1.ConditionTypeCVSS,
-							Comparator: dependencytrackv1alpha1.OpGTE,
-							Value:      testCVSSNine,
+							Subject:  dependencytrackv1alpha1.PolicyConditionSubjectSeverity,
+							Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs,
+							Value:    testSeverityCritical,
 						},
 					},
 				},
@@ -158,6 +156,10 @@ var _ = Describe("Policy API integration", func() {
 			Expect(updated.Status.UUID).NotTo(BeEmpty())
 			Expect(updated.Status.Name).To(Equal("Integration Policy"))
 
+			mockDT.mu.Lock()
+			Expect(mockDT.policy.GetOperator()).To(Equal(string(dependencytrackv1alpha1.PolicyOperatorAll)))
+			mockDT.mu.Unlock()
+
 			cond := meta.FindStatusCondition(updated.Status.Conditions, conditionReady)
 			Expect(cond).NotTo(BeNil())
 			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
@@ -174,14 +176,14 @@ var _ = Describe("Policy API integration", func() {
 					Finalizers: []string{policyFinalizer},
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Deletable Policy",
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Deletable Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
 						{
-							Type:       dependencytrackv1alpha1.ConditionTypeSeverity,
-							Comparator: dependencytrackv1alpha1.OpGT,
-							Value:      "5.0",
+							Subject:  dependencytrackv1alpha1.PolicyConditionSubjectSeverity,
+							Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs,
+							Value:    "5.0",
 						},
 					},
 				},
@@ -245,14 +247,14 @@ var _ = Describe("Policy API integration", func() {
 			policy := &dependencytrackv1alpha1.Policy{
 				ObjectMeta: metav1.ObjectMeta{Name: testOfflinePolicyName, Namespace: testNS},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Offline Policy",
-					Priority:      dependencytrackv1alpha1.PriorityMedium,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Offline Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
 						{
-							Type:       dependencytrackv1alpha1.ConditionTypeLicense,
-							Comparator: dependencytrackv1alpha1.OpEQ,
-							Value:      "MIT",
+							Subject:  dependencytrackv1alpha1.PolicyConditionSubjectLicense,
+							Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs,
+							Value:    "MIT",
 						},
 					},
 				},

@@ -705,11 +705,11 @@ metadata:
   namespace: %s
 spec:
   name: test-policy-license
-  priority: CRITICAL
-  failureAction: BLOCK_RELEASE
+  operator: ANY
+  violationState: FAIL
   conditions:
-    - type: LICENSE
-      comparator: EQ
+    - subject: LICENSE
+      operator: IS
       value: MIT
 `, policyWithCondition, namespace)
 				path := createPolicy(policyWithCondition, policyYAML)
@@ -731,11 +731,11 @@ metadata:
   namespace: %s
 spec:
   name: test-policy-purl
-  priority: HIGH
-  failureAction: BLOCK_DEPLOY
+  operator: ANY
+  violationState: FAIL
   conditions:
-    - type: PURL
-      comparator: EQ
+    - subject: PACKAGE_URL
+      operator: IS
       value: pkg:maven/org.example/demo@1.0.0
 `, policyWithPURL, namespace)
 				path := createPolicy(policyWithPURL, policyYAML)
@@ -754,16 +754,16 @@ metadata:
   namespace: %s
 spec:
   name: test-invalid
-  priority: INVALID_PRIORITY
-  failureAction: BLOCK_RELEASE
+  operator: ANY
+  violationState: NOOP
   conditions:
-    - type: CVSS
-      comparator: GTE
+    - subject: SEVERITY
+      operator: IS
       value: "7.0"
 `, namespace)
 				path := createPolicy("invalid", badYAML)
 				defer removeTemp(path)
-				applyPolicy(path, true, "kubectl should reject Policy with invalid priority enum")
+				applyPolicy(path, true, "kubectl should reject Policy with invalid violationState enum")
 			})
 
 			It("should converge one UUID-owned Policy through drift, update, and deletion", func() {
@@ -775,11 +775,11 @@ metadata:
   namespace: %s
 spec:
   name: %s
-  priority: HIGH
-  failureAction: REPORT
+  operator: ANY
+  violationState: WARN
   conditions:
-    - type: LICENSE
-      comparator: EQ
+    - subject: LICENSE
+      operator: IS
       value: MIT
 `, policyLifecycle, namespace, initialName)
 				path := createPolicy(policyLifecycle, policyYAML)
@@ -866,11 +866,11 @@ metadata:
   namespace: %s
 spec:
   name: %s
-  priority: CRITICAL
-  failureAction: BLOCK_RELEASE
+  operator: ANY
+  violationState: FAIL
   conditions:
-    - type: LICENSE
-      comparator: EQ
+    - subject: LICENSE
+      operator: IS
       value: Apache-2.0
 `, policyLifecycle, namespace, updatedName)
 				updatedPath := createPolicy(policyLifecycle+"-updated", updatedYAML)
@@ -924,11 +924,11 @@ metadata:
   namespace: %s
 spec:
   name: test-policy-for-delete
-  priority: MEDIUM
-  failureAction: REPORT
+  operator: ANY
+  violationState: WARN
   conditions:
-    - type: LICENSE
-      comparator: EQ
+    - subject: LICENSE
+      operator: IS
       value: BSD-3-Clause
 `, policyForDeletion, namespace)
 				path := createPolicy(policyForDeletion, policyYAML)

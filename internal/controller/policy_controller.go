@@ -41,9 +41,6 @@ const (
 	policyFinalizer = "dependencytrack.mko.dev/policy-finalizer"
 	conditionReady  = "Ready"
 
-	policyOperatorAny  = "ANY"
-	violationStateFail = "FAIL"
-
 	// Reason values for the Ready condition.
 	reasonCredentialsError      = "CredentialsError"
 	reasonPolicyListFailed      = "PolicyListFailed"
@@ -195,9 +192,9 @@ func (r *PolicyReconciler) getOrCreateDTPolicy(
 		dtPolicy = &dtapi.Policy{
 			Name:           policy.Spec.Name,
 			Global:         boolPtr(true),
-			Operator:       policyOperatorAny,
+			Operator:       string(policy.Spec.Operator),
 			Uuid:           policyUUID,
-			ViolationState: failureActionToViolationState(policy.Spec.FailureAction),
+			ViolationState: string(policy.Spec.ViolationState),
 		}
 		created, httpResp, err := apiClient.PolicyAPI.CreatePolicy(authCtx).Policy(*dtPolicy).Execute()
 		if err != nil {
@@ -221,15 +218,17 @@ func (r *PolicyReconciler) getOrCreateDTPolicy(
 			policy.Spec.Name, dtPolicy.GetUuid())
 	} else {
 		// Policy exists with matching UUID. Check for field drift and converge.
-		dtExpectedState := failureActionToViolationState(policy.Spec.FailureAction)
+		dtExpectedOperator := string(policy.Spec.Operator)
+		dtExpectedState := string(policy.Spec.ViolationState)
 		needsUpdate := dtPolicy.GetName() != policy.Spec.Name ||
+			dtPolicy.GetOperator() != dtExpectedOperator ||
 			dtPolicy.GetViolationState() != dtExpectedState
 		if needsUpdate {
 			updated, _, err := apiClient.PolicyAPI.UpdatePolicy(authCtx).Policy(dtapi.Policy{
 				Name:           policy.Spec.Name,
 				Uuid:           dtPolicy.GetUuid(),
 				Global:         boolPtr(true),
-				Operator:       policyOperatorAny,
+				Operator:       dtExpectedOperator,
 				ViolationState: dtExpectedState,
 			}).Execute()
 			if err != nil {
@@ -362,77 +361,16 @@ func (r *PolicyReconciler) createDTCondition(
 
 // policyConditionToDT converts a K8s PolicyCondition spec to a DT PolicyCondition model.
 func policyConditionToDT(specCond dependencytrackv1alpha1.PolicyCondition) dtapi.PolicyCondition {
-	dtCond := dtapi.PolicyCondition{
-		Operator: comparisonOperatorToDT(specCond.Comparator),
-		Subject:  conditionSubjectToDT(specCond.Type),
+	return dtapi.PolicyCondition{
+		Operator: string(specCond.Operator),
+		Subject:  string(specCond.Subject),
 		Value:    specCond.Value,
-	}
-	if specCond.IsSuppression {
-		vt := "SUPPRESSION"
-		dtCond.ViolationType = &vt
-	}
-	return dtCond
-}
-
-// conditionSubjectToDT maps CRD aliases to Dependency-Track 5.0.2 subjects.
-func conditionSubjectToDT(subject dependencytrackv1alpha1.PolicyConditionType) string {
-	switch subject {
-	case dependencytrackv1alpha1.ConditionTypePURL:
-		return "PACKAGE_URL"
-	case dependencytrackv1alpha1.ConditionTypeVulnerability:
-		return "VULNERABILITY_ID"
-	case dependencytrackv1alpha1.ConditionTypeCreatedBefore:
-		return "AGE"
-	default:
-		return string(subject)
-	}
-}
-
-// comparisonOperatorToDT maps the concise CRD comparator names to the enum
-// values accepted by Dependency-Track 5.0.2's PolicyCondition API.
-func comparisonOperatorToDT(operator dependencytrackv1alpha1.ComparisonOperator) string {
-	switch operator {
-	case dependencytrackv1alpha1.OpGT:
-		return "NUMERIC_GREATER_THAN"
-	case dependencytrackv1alpha1.OpGTE:
-		return "NUMERIC_GREATER_THAN_OR_EQUAL"
-	case dependencytrackv1alpha1.OpLT:
-		return "NUMERIC_LESS_THAN"
-	case dependencytrackv1alpha1.OpLTE:
-		return "NUMERIC_LESSER_THAN_OR_EQUAL"
-	case dependencytrackv1alpha1.OpEQ:
-		return "IS"
-	case dependencytrackv1alpha1.OpNE:
-		return "IS_NOT"
-	default:
-		return string(operator)
 	}
 }
 
 // boolPtr returns a pointer to the given bool.
 func boolPtr(b bool) *bool {
 	return &b
-}
-
-// failureActionToViolationState maps a K8s FailureAction to the
-// DependencyTrack violationState value accepted by the API.
-//
-// Mapping rationale:
-//   - BLOCK_RELEASE / BLOCK_DEPLOY → FAIL (hard block)
-//   - REPORT                      → WARN (soft block, advisory)
-//   - IGNORE                      → INFO (lowest v5.0.2 violation state)
-func failureActionToViolationState(action dependencytrackv1alpha1.FailureAction) string {
-	switch action {
-	case dependencytrackv1alpha1.FailureActionBlockRelease,
-		dependencytrackv1alpha1.FailureActionBlockDeploy:
-		return violationStateFail
-	case dependencytrackv1alpha1.FailureActionReport:
-		return "WARN"
-	case dependencytrackv1alpha1.FailureActionIgnore:
-		return "INFO"
-	default:
-		return violationStateFail
-	}
 }
 
 // reconcileDelete handles policy deletion from DependencyTrack. It retains the

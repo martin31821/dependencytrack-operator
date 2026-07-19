@@ -20,81 +20,71 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Priority defines the severity level of a Policy.
-// +kubebuilder:validation:Enum=CRITICAL;HIGH;MEDIUM;LOW;INFO
-type Priority string
+// ViolationState defines the severity assigned when a policy is violated.
+// Values match the Dependency-Track Policy API and UI directly.
+// +kubebuilder:validation:Enum=INFO;WARN;FAIL
+type ViolationState string
 
 const (
-	PriorityCritical Priority = "CRITICAL"
-	PriorityHigh     Priority = "HIGH"
-	PriorityMedium   Priority = "MEDIUM"
-	PriorityLow      Priority = "LOW"
-	PriorityInfo     Priority = "INFO"
+	ViolationStateInfo ViolationState = "INFO"
+	ViolationStateWarn ViolationState = "WARN"
+	ViolationStateFail ViolationState = "FAIL"
 )
 
-// FailureAction defines what happens when a policy condition is violated.
-// +kubebuilder:validation:Enum=BLOCK_RELEASE;BLOCK_DEPLOY;REPORT;IGNORE
-type FailureAction string
+// PolicyOperator defines how a policy combines its conditions.
+// Values match the Dependency-Track Policy API and UI directly.
+// +kubebuilder:validation:Enum=ANY;ALL
+type PolicyOperator string
 
 const (
-	FailureActionBlockRelease FailureAction = "BLOCK_RELEASE"
-	FailureActionBlockDeploy  FailureAction = "BLOCK_DEPLOY"
-	FailureActionReport       FailureAction = "REPORT"
-	FailureActionIgnore       FailureAction = "IGNORE"
+	PolicyOperatorAny PolicyOperator = "ANY"
+	PolicyOperatorAll PolicyOperator = "ALL"
 )
 
-// PolicyConditionType defines the type of comparison used in a policy condition.
-// +kubebuilder:validation:Enum=CVSS;VULNERABILITY;LICENSE;CPE;PURL;PACKAGE;PACKAGE_TYPE;SEVERITY;CREATED_BEFORE
-type PolicyConditionType string
+// PolicyConditionSubject defines the Dependency-Track subject evaluated by a condition.
+// +kubebuilder:validation:Enum=AGE;COORDINATES;CPE;EXPRESSION;LICENSE;LICENSE_GROUP;PACKAGE_URL;SEVERITY;SWID_TAGID;VERSION;COMPONENT_HASH;CWE;VULNERABILITY_ID;VERSION_DISTANCE;EPSS
+type PolicyConditionSubject string
 
 const (
-	ConditionTypeCVSS          PolicyConditionType = "CVSS"
-	ConditionTypeVulnerability PolicyConditionType = "VULNERABILITY"
-	ConditionTypeLicense       PolicyConditionType = "LICENSE"
-	ConditionTypeCPE           PolicyConditionType = "CPE"
-	ConditionTypePURL          PolicyConditionType = "PURL"
-	ConditionTypePackage       PolicyConditionType = "PACKAGE"
-	ConditionTypePackageType   PolicyConditionType = "PACKAGE_TYPE"
-	ConditionTypeSeverity      PolicyConditionType = "SEVERITY"
-	ConditionTypeCreatedBefore PolicyConditionType = "CREATED_BEFORE"
+	PolicyConditionSubjectAge             PolicyConditionSubject = "AGE"
+	PolicyConditionSubjectCoordinates     PolicyConditionSubject = "COORDINATES"
+	PolicyConditionSubjectCPE             PolicyConditionSubject = "CPE"
+	PolicyConditionSubjectExpression      PolicyConditionSubject = "EXPRESSION"
+	PolicyConditionSubjectLicense         PolicyConditionSubject = "LICENSE"
+	PolicyConditionSubjectLicenseGroup    PolicyConditionSubject = "LICENSE_GROUP"
+	PolicyConditionSubjectPackageURL      PolicyConditionSubject = "PACKAGE_URL"
+	PolicyConditionSubjectSeverity        PolicyConditionSubject = "SEVERITY"
+	PolicyConditionSubjectSWIDTagID       PolicyConditionSubject = "SWID_TAGID"
+	PolicyConditionSubjectVersion         PolicyConditionSubject = "VERSION"
+	PolicyConditionSubjectComponentHash   PolicyConditionSubject = "COMPONENT_HASH"
+	PolicyConditionSubjectCWE             PolicyConditionSubject = "CWE"
+	PolicyConditionSubjectVulnerabilityID PolicyConditionSubject = "VULNERABILITY_ID"
+	PolicyConditionSubjectVersionDistance PolicyConditionSubject = "VERSION_DISTANCE"
+	PolicyConditionSubjectEPSS            PolicyConditionSubject = "EPSS"
 )
 
-// ComparisonOperator defines the comparison operator for a policy condition.
-// +kubebuilder:validation:Enum=GT;GTE;LT;LTE;EQ;NE
-type ComparisonOperator string
+// PolicyConditionOperator defines how a condition compares its subject to its value.
+// +kubebuilder:validation:Enum=IS;IS_NOT
+type PolicyConditionOperator string
 
 const (
-	OpGT  ComparisonOperator = "GT"
-	OpGTE ComparisonOperator = "GTE"
-	OpLT  ComparisonOperator = "LT"
-	OpLTE ComparisonOperator = "LTE"
-	OpEQ  ComparisonOperator = "EQ"
-	OpNE  ComparisonOperator = "NE"
+	PolicyConditionOperatorIs    PolicyConditionOperator = "IS"
+	PolicyConditionOperatorIsNot PolicyConditionOperator = "IS_NOT"
 )
 
 // PolicyCondition defines a single condition within a Policy.
 type PolicyCondition struct {
-	// Type specifies the kind of component to evaluate (e.g. CVSS, SEVERITY, LICENSE).
+	// Subject specifies the Dependency-Track property to evaluate.
 	// +kubebuilder:validation:Required
-	Type PolicyConditionType `json:"type"`
+	Subject PolicyConditionSubject `json:"subject"`
 
-	// Comparator is the comparison operator applied to the condition value.
+	// Operator specifies whether the subject is or is not the configured value.
 	// +kubebuilder:validation:Required
-	Comparator ComparisonOperator `json:"comparator"`
+	Operator PolicyConditionOperator `json:"operator"`
 
-	// Value is the value to compare against.
-	// The interpretation depends on the Type:
-	//   - CVSS/SEVERITY: numeric threshold (e.g. "7.0")
-	//   - LICENSE: license identifier string
-	//   - CPE/PURL/PACKAGE: pattern to match
+	// Value is the value compared against the subject.
 	// +kubebuilder:validation:Required
 	Value string `json:"value"`
-
-	// IsSuppression when true indicates this condition suppresses (allows)
-	// matching findings rather than blocking them.
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=false
-	IsSuppression bool `json:"isSuppression,omitempty"`
 }
 
 // PolicySpec defines the desired state of Policy.
@@ -105,18 +95,13 @@ type PolicySpec struct {
 	// +kubebuilder:validation:MaxLength=255
 	Name string `json:"name"`
 
-	// Description is an optional human-readable description of the policy.
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:MaxLength=1024
-	Description string `json:"description,omitempty"`
-
-	// Priority defines the severity level of this policy.
+	// Operator defines whether any or all policy conditions must match.
 	// +kubebuilder:validation:Required
-	Priority Priority `json:"priority"`
+	Operator PolicyOperator `json:"operator"`
 
-	// FailureAction defines what happens when policy conditions are violated.
+	// ViolationState defines the severity assigned when policy conditions are violated.
 	// +kubebuilder:validation:Required
-	FailureAction FailureAction `json:"failureAction"`
+	ViolationState ViolationState `json:"violationState"`
 
 	// Conditions is the list of inline conditions that must be evaluated.
 	// At least one condition must be provided.
@@ -141,7 +126,6 @@ type PolicyStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:printcolumn:name="UUID",type=string,JSONPath=`.status.uuid`
-// +kubebuilder:printcolumn:name="Priority",type=string,JSONPath=`.spec.priority`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 
 // Policy is the Schema for the policies API.

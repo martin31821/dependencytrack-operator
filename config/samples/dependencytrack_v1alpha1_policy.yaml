@@ -7,11 +7,10 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: policy-sample
 spec:
-  name: Critical Vulnerability Block
-  description: Block releases with critical or high CVSS vulnerabilities
-  priority: CRITICAL
-  failureAction: BLOCK_RELEASE
+  name: Critical Vulnerability Policy
+  operator: ANY
+  violationState: FAIL
   conditions:
-    - type: CVSS
-      comparator: GTE
-      value: "7.0"
+    - subject: SEVERITY
+      operator: IS
+      value: CRITICAL

@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-const testCVSSNine = "9.0"
+const testSeverityCritical = "CRITICAL"
 
 func TestPolicyGVKFromScheme(t *testing.T) {
 	// GVK is derived from Scheme registration, not zero-value.
@@ -55,75 +55,62 @@ func TestPolicyListGVKFromScheme(t *testing.T) {
 
 func TestPolicyConditionValidation(t *testing.T) {
 	tests := []struct {
-		name         string
-		cond         PolicyCondition
-		wantType     PolicyConditionType
-		wantOp       ComparisonOperator
-		wantValue    string
-		wantSuppress bool
+		name        string
+		cond        PolicyCondition
+		wantSubject PolicyConditionSubject
+		wantOp      PolicyConditionOperator
+		wantValue   string
 	}{
 		{
-			name: "CVSS critical condition",
+			name: "subject is value",
 			cond: PolicyCondition{
-				Type:       ConditionTypeCVSS,
-				Comparator: OpGTE,
-				Value:      testCVSSNine,
+				Subject:  PolicyConditionSubjectSeverity,
+				Operator: PolicyConditionOperatorIs,
+				Value:    "CRITICAL",
 			},
-			wantType:     ConditionTypeCVSS,
-			wantOp:       OpGTE,
-			wantValue:    testCVSSNine,
-			wantSuppress: false,
+			wantSubject: PolicyConditionSubjectSeverity,
+			wantOp:      PolicyConditionOperatorIs,
+			wantValue:   "CRITICAL",
 		},
 		{
-			name: "Suppression condition",
+			name: "subject is not value",
 			cond: PolicyCondition{
-				Type:          ConditionTypeLicense,
-				Comparator:    OpEQ,
-				Value:         "MIT",
-				IsSuppression: true,
+				Subject:  PolicyConditionSubjectLicense,
+				Operator: PolicyConditionOperatorIsNot,
+				Value:    "GPL-3.0-only",
 			},
-			wantType:     ConditionTypeLicense,
-			wantOp:       OpEQ,
-			wantValue:    "MIT",
-			wantSuppress: true,
+			wantSubject: PolicyConditionSubjectLicense,
+			wantOp:      PolicyConditionOperatorIsNot,
+			wantValue:   "GPL-3.0-only",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.wantType, tt.cond.Type)
-			assert.Equal(t, tt.wantOp, tt.cond.Comparator)
+			assert.Equal(t, tt.wantSubject, tt.cond.Subject)
+			assert.Equal(t, tt.wantOp, tt.cond.Operator)
 			assert.Equal(t, tt.wantValue, tt.cond.Value)
-			assert.Equal(t, tt.wantSuppress, tt.cond.IsSuppression)
 		})
 	}
-	// Validate suppression flag defaults to false when unset
-	sup := PolicyCondition{
-		Type:       ConditionTypeSeverity,
-		Comparator: OpGT,
-		Value:      "5.0",
-	}
-	assert.False(t, sup.IsSuppression)
 }
 
 func TestPolicySpecRequiredFields(t *testing.T) {
 	// Missing name should be invalid
 	invalid := PolicySpec{
-		Priority:      PriorityCritical,
-		FailureAction: FailureActionBlockRelease,
+		Operator:       PolicyOperatorAny,
+		ViolationState: ViolationStateFail,
 		Conditions: []PolicyCondition{
-			{Type: ConditionTypeCVSS, Comparator: OpGTE, Value: "7.0"},
+			{Subject: PolicyConditionSubjectSeverity, Operator: PolicyConditionOperatorIs, Value: "HIGH"},
 		},
 	}
 	assert.Empty(t, invalid.Name)
 
 	// Valid spec
 	valid := PolicySpec{
-		Name:          "Block Critical Vulnerabilities",
-		Description:   "Reject any policy with critical CVSS issues",
-		Priority:      PriorityCritical,
-		FailureAction: FailureActionBlockRelease,
+		Operator:       PolicyOperatorAny,
+		Name:           "Block Critical Vulnerabilities",
+		ViolationState: ViolationStateFail,
 		Conditions: []PolicyCondition{
-			{Type: ConditionTypeCVSS, Comparator: OpGTE, Value: testCVSSNine},
+			{Subject: PolicyConditionSubjectSeverity, Operator: PolicyConditionOperatorIs, Value: testSeverityCritical},
 		},
 	}
 	assert.NotEmpty(t, valid.Name)
@@ -149,53 +136,48 @@ func TestPolicyStatusFields(t *testing.T) {
 	assert.Len(t, status.Conditions, 1)
 }
 
-func TestPriorityConstants(t *testing.T) {
-	assert.Equal(t, Priority("CRITICAL"), PriorityCritical)
-	assert.Equal(t, Priority("HIGH"), PriorityHigh)
-	assert.Equal(t, Priority("MEDIUM"), PriorityMedium)
-	assert.Equal(t, Priority("LOW"), PriorityLow)
-	assert.Equal(t, Priority("INFO"), PriorityInfo)
+func TestViolationStateConstants(t *testing.T) {
+	assert.Equal(t, ViolationState("INFO"), ViolationStateInfo)
+	assert.Equal(t, ViolationState("WARN"), ViolationStateWarn)
+	assert.Equal(t, ViolationState("FAIL"), ViolationStateFail)
 }
 
-func TestFailureActionConstants(t *testing.T) {
-	assert.Equal(t, FailureAction("BLOCK_RELEASE"), FailureActionBlockRelease)
-	assert.Equal(t, FailureAction("BLOCK_DEPLOY"), FailureActionBlockDeploy)
-	assert.Equal(t, FailureAction("REPORT"), FailureActionReport)
-	assert.Equal(t, FailureAction("IGNORE"), FailureActionIgnore)
+func TestPolicyOperatorConstants(t *testing.T) {
+	assert.Equal(t, PolicyOperator("ANY"), PolicyOperatorAny)
+	assert.Equal(t, PolicyOperator("ALL"), PolicyOperatorAll)
 }
 
-func TestPolicyConditionTypeConstants(t *testing.T) {
-	assert.Equal(t, PolicyConditionType("CVSS"), ConditionTypeCVSS)
-	assert.Equal(t, PolicyConditionType("VULNERABILITY"), ConditionTypeVulnerability)
-	assert.Equal(t, PolicyConditionType("LICENSE"), ConditionTypeLicense)
-	assert.Equal(t, PolicyConditionType("CPE"), ConditionTypeCPE)
-	assert.Equal(t, PolicyConditionType("PURL"), ConditionTypePURL)
-	assert.Equal(t, PolicyConditionType("PACKAGE"), ConditionTypePackage)
-	assert.Equal(t, PolicyConditionType("PACKAGE_TYPE"), ConditionTypePackageType)
-	assert.Equal(t, PolicyConditionType("SEVERITY"), ConditionTypeSeverity)
-	assert.Equal(t, PolicyConditionType("CREATED_BEFORE"), ConditionTypeCreatedBefore)
+func TestPolicyConditionSubjectConstants(t *testing.T) {
+	assert.Equal(t, PolicyConditionSubject("AGE"), PolicyConditionSubjectAge)
+	assert.Equal(t, PolicyConditionSubject("COORDINATES"), PolicyConditionSubjectCoordinates)
+	assert.Equal(t, PolicyConditionSubject("CPE"), PolicyConditionSubjectCPE)
+	assert.Equal(t, PolicyConditionSubject("EXPRESSION"), PolicyConditionSubjectExpression)
+	assert.Equal(t, PolicyConditionSubject("LICENSE"), PolicyConditionSubjectLicense)
+	assert.Equal(t, PolicyConditionSubject("LICENSE_GROUP"), PolicyConditionSubjectLicenseGroup)
+	assert.Equal(t, PolicyConditionSubject("PACKAGE_URL"), PolicyConditionSubjectPackageURL)
+	assert.Equal(t, PolicyConditionSubject("SEVERITY"), PolicyConditionSubjectSeverity)
+	assert.Equal(t, PolicyConditionSubject("SWID_TAGID"), PolicyConditionSubjectSWIDTagID)
+	assert.Equal(t, PolicyConditionSubject("VERSION"), PolicyConditionSubjectVersion)
+	assert.Equal(t, PolicyConditionSubject("COMPONENT_HASH"), PolicyConditionSubjectComponentHash)
+	assert.Equal(t, PolicyConditionSubject("CWE"), PolicyConditionSubjectCWE)
+	assert.Equal(t, PolicyConditionSubject("VULNERABILITY_ID"), PolicyConditionSubjectVulnerabilityID)
+	assert.Equal(t, PolicyConditionSubject("VERSION_DISTANCE"), PolicyConditionSubjectVersionDistance)
+	assert.Equal(t, PolicyConditionSubject("EPSS"), PolicyConditionSubjectEPSS)
 }
 
-func TestComparisonOperatorConstants(t *testing.T) {
-	assert.Equal(t, ComparisonOperator("GT"), OpGT)
-	assert.Equal(t, ComparisonOperator("GTE"), OpGTE)
-	assert.Equal(t, ComparisonOperator("LT"), OpLT)
-	assert.Equal(t, ComparisonOperator("LTE"), OpLTE)
-	assert.Equal(t, ComparisonOperator("EQ"), OpEQ)
-	assert.Equal(t, ComparisonOperator("NE"), OpNE)
+func TestPolicyConditionOperatorConstants(t *testing.T) {
+	assert.Equal(t, PolicyConditionOperator("IS"), PolicyConditionOperatorIs)
+	assert.Equal(t, PolicyConditionOperator("IS_NOT"), PolicyConditionOperatorIsNot)
 }
 
 func TestDeepCopyPolicy(t *testing.T) {
 	original := &Policy{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
 		Spec: PolicySpec{
-			Name:          "Test Policy",
-			Description:   "A test policy",
-			Priority:      PriorityHigh,
-			FailureAction: FailureActionBlockRelease,
-			Conditions: []PolicyCondition{
-				{Type: ConditionTypeCVSS, Comparator: OpGTE, Value: "7.0", IsSuppression: false},
-			},
+			Operator:       PolicyOperatorAny,
+			Name:           "Test Policy",
+			ViolationState: ViolationStateFail,
+			Conditions:     []PolicyCondition{},
 		},
 		Status: PolicyStatus{
 			UUID: "abc-123",

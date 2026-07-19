@@ -42,11 +42,10 @@ import (
 
 const (
 	testNS                  = "default"
-	testCVSSSeven           = "7.0"
-	testCVSSNine            = "9.0"
+	testSeverityHigh        = "HIGH"
+	testSeverityCritical    = "CRITICAL"
 	testOfflinePolicyName   = "offline-policy"
 	testConvergedPolicyName = "Converged Policy"
-	testViolationReport     = "REPORT"
 )
 
 // --- mock ClientProviderInterface for tests ---
@@ -172,6 +171,9 @@ func (s *mockDTServer) updatePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.policy != nil {
 		s.policy.Name = policy.Name
+		if policy.Operator != "" {
+			s.policy.Operator = policy.Operator
+		}
 		if policy.ViolationState != "" {
 			s.policy.ViolationState = policy.ViolationState
 		}
@@ -310,14 +312,14 @@ var _ = Describe("Policy Controller", func() {
 						Namespace: testNS,
 					},
 					Spec: dependencytrackv1alpha1.PolicySpec{
-						Name:          "Test Policy",
-						Priority:      dependencytrackv1alpha1.PriorityHigh,
-						FailureAction: dependencytrackv1alpha1.FailureActionBlockRelease,
+						Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+						Name:           "Test Policy",
+						ViolationState: dependencytrackv1alpha1.ViolationStateFail,
 						Conditions: []dependencytrackv1alpha1.PolicyCondition{
 							{
-								Type:       dependencytrackv1alpha1.ConditionTypeCVSS,
-								Comparator: dependencytrackv1alpha1.OpGTE,
-								Value:      testCVSSSeven,
+								Subject:  dependencytrackv1alpha1.PolicyConditionSubjectSeverity,
+								Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs,
+								Value:    testSeverityHigh,
 							},
 						},
 					},
@@ -362,20 +364,19 @@ var _ = Describe("Policy Controller", func() {
 					Finalizers: []string{policyFinalizer},
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "New Policy",
-					Priority:      dependencytrackv1alpha1.PriorityCritical,
-					FailureAction: dependencytrackv1alpha1.FailureActionBlockDeploy,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "New Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateFail,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
 						{
-							Type:          dependencytrackv1alpha1.ConditionTypeLicense,
-							Comparator:    dependencytrackv1alpha1.OpEQ,
-							Value:         "GPL-3.0",
-							IsSuppression: true,
+							Subject:  dependencytrackv1alpha1.PolicyConditionSubjectLicense,
+							Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs,
+							Value:    "GPL-3.0",
 						},
 						{
-							Type:       dependencytrackv1alpha1.ConditionTypeSeverity,
-							Comparator: dependencytrackv1alpha1.OpGT,
-							Value:      testCVSSNine,
+							Subject:  dependencytrackv1alpha1.PolicyConditionSubjectSeverity,
+							Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs,
+							Value:    testSeverityCritical,
 						},
 					},
 				},
@@ -442,14 +443,14 @@ var _ = Describe("Policy Controller", func() {
 					Finalizers: []string{policyFinalizer},
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Orphan Policy",
-					Priority:      dependencytrackv1alpha1.PriorityMedium,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Orphan Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
 						{
-							Type:       dependencytrackv1alpha1.ConditionTypeCPE,
-							Comparator: dependencytrackv1alpha1.OpEQ,
-							Value:      "app:myapp",
+							Subject:  dependencytrackv1alpha1.PolicyConditionSubjectCPE,
+							Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs,
+							Value:    "app:myapp",
 						},
 					},
 				},
@@ -493,61 +494,30 @@ var _ = Describe("Policy Controller", func() {
 	})
 
 	Context("policyConditionToDT conversion", func() {
-		It("should convert a CVSS condition correctly", func() {
+		It("should pass native subject, IS operator, and value through unchanged", func() {
 			specCond := dependencytrackv1alpha1.PolicyCondition{
-				Type:       dependencytrackv1alpha1.ConditionTypeCVSS,
-				Comparator: dependencytrackv1alpha1.OpGTE,
-				Value:      testCVSSSeven,
+				Subject:  dependencytrackv1alpha1.PolicyConditionSubjectSeverity,
+				Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs,
+				Value:    "CRITICAL",
 			}
 			dtCond := policyConditionToDT(specCond)
-			Expect(dtCond.GetOperator()).To(Equal("NUMERIC_GREATER_THAN_OR_EQUAL"))
-			Expect(dtCond.GetSubject()).To(Equal("CVSS"))
-			Expect(dtCond.GetValue()).To(Equal(testCVSSSeven))
+			Expect(dtCond.GetSubject()).To(Equal("SEVERITY"))
+			Expect(dtCond.GetOperator()).To(Equal("IS"))
+			Expect(dtCond.GetValue()).To(Equal("CRITICAL"))
 			Expect(dtCond.GetViolationType()).To(BeEmpty())
 		})
 
-		It("should set SUPPRESSION violation type for suppressors", func() {
+		It("should pass IS_NOT through unchanged", func() {
 			specCond := dependencytrackv1alpha1.PolicyCondition{
-				Type:          dependencytrackv1alpha1.ConditionTypeLicense,
-				Comparator:    dependencytrackv1alpha1.OpEQ,
-				Value:         "MIT",
-				IsSuppression: true,
+				Subject:  dependencytrackv1alpha1.PolicyConditionSubjectLicense,
+				Operator: dependencytrackv1alpha1.PolicyConditionOperatorIsNot,
+				Value:    "GPL-3.0-only",
 			}
 			dtCond := policyConditionToDT(specCond)
-			Expect(dtCond.GetOperator()).To(Equal("IS"))
-			Expect(dtCond.GetViolationType()).To(Equal("SUPPRESSION"))
-		})
-
-		It("should convert a SEVERITY condition correctly", func() {
-			specCond := dependencytrackv1alpha1.PolicyCondition{
-				Type:       dependencytrackv1alpha1.ConditionTypeSeverity,
-				Comparator: dependencytrackv1alpha1.OpLT,
-				Value:      "4.0",
-			}
-			dtCond := policyConditionToDT(specCond)
-			Expect(dtCond.GetOperator()).To(Equal("NUMERIC_LESS_THAN"))
-			Expect(dtCond.GetSubject()).To(Equal("SEVERITY"))
-			Expect(dtCond.GetValue()).To(Equal("4.0"))
-		})
-
-		It("should map CRD package URL aliases to the v5.0.2 subject", func() {
-			specCond := dependencytrackv1alpha1.PolicyCondition{
-				Type:       dependencytrackv1alpha1.ConditionTypePURL,
-				Comparator: dependencytrackv1alpha1.OpEQ,
-				Value:      "pkg:maven/org.example/demo@1.0.0",
-			}
-			dtCond := policyConditionToDT(specCond)
-			Expect(dtCond.GetOperator()).To(Equal("IS"))
-			Expect(dtCond.GetSubject()).To(Equal("PACKAGE_URL"))
-		})
-	})
-
-	Context("failureActionToViolationState conversion", func() {
-		It("should emit only Dependency-Track 5.0.2 violation states", func() {
-			Expect(failureActionToViolationState(dependencytrackv1alpha1.FailureActionBlockRelease)).To(Equal(violationStateFail))
-			Expect(failureActionToViolationState(dependencytrackv1alpha1.FailureActionBlockDeploy)).To(Equal(violationStateFail))
-			Expect(failureActionToViolationState(dependencytrackv1alpha1.FailureActionReport)).To(Equal("WARN"))
-			Expect(failureActionToViolationState(dependencytrackv1alpha1.FailureActionIgnore)).To(Equal("INFO"))
+			Expect(dtCond.GetSubject()).To(Equal("LICENSE"))
+			Expect(dtCond.GetOperator()).To(Equal("IS_NOT"))
+			Expect(dtCond.GetValue()).To(Equal("GPL-3.0-only"))
+			Expect(dtCond.GetViolationType()).To(BeEmpty())
 		})
 	})
 
@@ -576,14 +546,14 @@ var _ = Describe("Policy Controller", func() {
 					Finalizers: []string{policyFinalizer},
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Shared Policy",
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Shared Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
 						{
-							Type:       dependencytrackv1alpha1.ConditionTypeCVSS,
-							Comparator: dependencytrackv1alpha1.OpGTE,
-							Value:      testCVSSNine,
+							Subject:  dependencytrackv1alpha1.PolicyConditionSubjectSeverity,
+							Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs,
+							Value:    testSeverityCritical,
 						},
 					},
 				},
@@ -607,8 +577,8 @@ var _ = Describe("Policy Controller", func() {
 				Name:           "Shared Policy",
 				Uuid:           "external-uuid-abc",
 				Global:         boolPtr(true),
-				Operator:       policyOperatorAny,
-				ViolationState: testViolationReport,
+				Operator:       string(dependencytrackv1alpha1.PolicyOperatorAny),
+				ViolationState: string(dependencytrackv1alpha1.ViolationStateWarn),
 			}
 			mockDT.mu.Unlock()
 
@@ -650,14 +620,14 @@ var _ = Describe("Policy Controller", func() {
 					Finalizers: []string{policyFinalizer},
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Owned Policy",
-					Priority:      dependencytrackv1alpha1.PriorityLow,
-					FailureAction: dependencytrackv1alpha1.FailureActionIgnore,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Owned Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateInfo,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
 						{
-							Type:       dependencytrackv1alpha1.ConditionTypeLicense,
-							Comparator: dependencytrackv1alpha1.OpNE,
-							Value:      "AGPL-3.0",
+							Subject:  dependencytrackv1alpha1.PolicyConditionSubjectLicense,
+							Operator: dependencytrackv1alpha1.PolicyConditionOperatorIsNot,
+							Value:    "AGPL-3.0",
 						},
 					},
 				},
@@ -705,7 +675,7 @@ var _ = Describe("Policy Controller", func() {
 	Context("when a UUID-owned policy has drifted fields", func() {
 		ctx := context.Background()
 
-		It("should converge drifted name and violation state on the same remote UUID", func() {
+		It("should converge drifted name, operator, and violation state on the same remote UUID", func() {
 			const driftResourceName = "test-policy-drift-converge"
 			const driftNS = testNS
 
@@ -717,11 +687,11 @@ var _ = Describe("Policy Controller", func() {
 					Finalizers: []string{policyFinalizer},
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          testConvergedPolicyName,
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionBlockRelease,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAll,
+					Name:           testConvergedPolicyName,
+					ViolationState: dependencytrackv1alpha1.ViolationStateFail,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
-						{Type: dependencytrackv1alpha1.ConditionTypeSeverity, Comparator: dependencytrackv1alpha1.OpGTE, Value: "0.1"},
+						{Subject: dependencytrackv1alpha1.PolicyConditionSubjectSeverity, Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs, Value: "0.1"},
 					},
 				},
 			}
@@ -734,15 +704,15 @@ var _ = Describe("Policy Controller", func() {
 			})
 
 			// Pre-populate the mock DT server with a policy that has the same UUID
-			// but drifted fields (different name and FailureAction) — simulating
+			// but drifted fields (different name, operator, and ViolationState) — simulating
 			// out-of-band manual edits in the DependencyTrack UI.
 			mockDT.mu.Lock()
 			mockDT.policy = &dtapi.Policy{
 				Name:           "Old Stale Name",
 				Uuid:           "converge-uuid-456",
 				Global:         boolPtr(true),
-				Operator:       policyOperatorAny,
-				ViolationState: violationStateFail,
+				Operator:       string(dependencytrackv1alpha1.PolicyOperatorAny),
+				ViolationState: string(dependencytrackv1alpha1.ViolationStateFail),
 			}
 			mockDT.mu.Unlock()
 
@@ -779,7 +749,8 @@ var _ = Describe("Policy Controller", func() {
 			mockDT.mu.Lock()
 			defer mockDT.mu.Unlock()
 			Expect(mockDT.policy.GetName()).To(Equal(testConvergedPolicyName))
-			Expect(mockDT.policy.GetViolationState()).To(Equal(violationStateFail))
+			Expect(mockDT.policy.GetOperator()).To(Equal(string(dependencytrackv1alpha1.PolicyOperatorAll)))
+			Expect(mockDT.policy.GetViolationState()).To(Equal(string(dependencytrackv1alpha1.ViolationStateFail)))
 			Expect(mockDT.policy.GetUuid()).To(Equal("converge-uuid-456"))
 		})
 
@@ -795,11 +766,11 @@ var _ = Describe("Policy Controller", func() {
 					Finalizers: []string{policyFinalizer},
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          testConvergedPolicyName,
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionBlockRelease,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           testConvergedPolicyName,
+					ViolationState: dependencytrackv1alpha1.ViolationStateFail,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
-						{Type: dependencytrackv1alpha1.ConditionTypeSeverity, Comparator: dependencytrackv1alpha1.OpGTE, Value: "0.1"},
+						{Subject: dependencytrackv1alpha1.PolicyConditionSubjectSeverity, Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs, Value: "0.1"},
 					},
 				},
 			}
@@ -818,8 +789,8 @@ var _ = Describe("Policy Controller", func() {
 				Name:           testConvergedPolicyName,
 				Uuid:           "converge-uuid-noop",
 				Global:         boolPtr(true),
-				Operator:       policyOperatorAny,
-				ViolationState: violationStateFail,
+				Operator:       string(dependencytrackv1alpha1.PolicyOperatorAny),
+				ViolationState: string(dependencytrackv1alpha1.ViolationStateFail),
 			}
 			mockDT.mu.Unlock()
 
@@ -854,7 +825,7 @@ var _ = Describe("Policy Controller", func() {
 			mockDT.mu.Lock()
 			defer mockDT.mu.Unlock()
 			Expect(mockDT.policy.GetName()).To(Equal(testConvergedPolicyName))
-			Expect(mockDT.policy.GetViolationState()).To(Equal(violationStateFail))
+			Expect(mockDT.policy.GetViolationState()).To(Equal(string(dependencytrackv1alpha1.ViolationStateFail)))
 		})
 	})
 
@@ -909,11 +880,11 @@ var _ = Describe("Policy Controller", func() {
 					Finalizers: []string{policyFinalizer},
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Create Fail Policy",
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Create Fail Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
-						{Type: dependencytrackv1alpha1.ConditionTypeCVSS, Comparator: dependencytrackv1alpha1.OpGTE, Value: testCVSSSeven},
+						{Subject: dependencytrackv1alpha1.PolicyConditionSubjectSeverity, Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs, Value: testSeverityHigh},
 					},
 				},
 			}
@@ -948,11 +919,11 @@ var _ = Describe("Policy Controller", func() {
 					Finalizers: []string{policyFinalizer},
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "List Fail Policy",
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "List Fail Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
-						{Type: dependencytrackv1alpha1.ConditionTypeCVSS, Comparator: dependencytrackv1alpha1.OpGTE, Value: testCVSSSeven},
+						{Subject: dependencytrackv1alpha1.PolicyConditionSubjectSeverity, Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs, Value: testSeverityHigh},
 					},
 				},
 			}
@@ -987,11 +958,11 @@ var _ = Describe("Policy Controller", func() {
 					Finalizers: []string{policyFinalizer},
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Get Fail Policy",
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Get Fail Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
-						{Type: dependencytrackv1alpha1.ConditionTypeCVSS, Comparator: dependencytrackv1alpha1.OpGTE, Value: testCVSSSeven},
+						{Subject: dependencytrackv1alpha1.PolicyConditionSubjectSeverity, Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs, Value: testSeverityHigh},
 					},
 				},
 			}
@@ -1029,8 +1000,8 @@ var _ = Describe("Policy Controller", func() {
 				Name:           "Cond Fail Policy",
 				Uuid:           "cond-fail-uuid-123",
 				Global:         boolPtr(true),
-				Operator:       policyOperatorAny,
-				ViolationState: testViolationReport,
+				Operator:       string(dependencytrackv1alpha1.PolicyOperatorAny),
+				ViolationState: string(dependencytrackv1alpha1.ViolationStateWarn),
 			}
 
 			res := &dependencytrackv1alpha1.Policy{
@@ -1040,11 +1011,11 @@ var _ = Describe("Policy Controller", func() {
 					Finalizers: []string{policyFinalizer},
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Cond Fail Policy",
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Cond Fail Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
-						{Type: dependencytrackv1alpha1.ConditionTypeCVSS, Comparator: dependencytrackv1alpha1.OpGTE, Value: testCVSSSeven},
+						{Subject: dependencytrackv1alpha1.PolicyConditionSubjectSeverity, Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs, Value: testSeverityHigh},
 					},
 				},
 			}
@@ -1082,8 +1053,8 @@ var _ = Describe("Policy Controller", func() {
 				Name:           "Delete Success Policy",
 				Uuid:           "del-success-uuid-123",
 				Global:         boolPtr(true),
-				Operator:       policyOperatorAny,
-				ViolationState: testViolationReport,
+				Operator:       string(dependencytrackv1alpha1.PolicyOperatorAny),
+				ViolationState: string(dependencytrackv1alpha1.ViolationStateWarn),
 			}
 
 			res := &dependencytrackv1alpha1.Policy{
@@ -1092,11 +1063,11 @@ var _ = Describe("Policy Controller", func() {
 					Namespace: negNS,
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Delete Success Policy",
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Delete Success Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
-						{Type: dependencytrackv1alpha1.ConditionTypeCVSS, Comparator: dependencytrackv1alpha1.OpGTE, Value: testCVSSSeven},
+						{Subject: dependencytrackv1alpha1.PolicyConditionSubjectSeverity, Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs, Value: testSeverityHigh},
 					},
 				},
 			}
@@ -1133,11 +1104,11 @@ var _ = Describe("Policy Controller", func() {
 					Namespace: negNS,
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Delete 404 Policy",
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Delete 404 Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
-						{Type: dependencytrackv1alpha1.ConditionTypeCVSS, Comparator: dependencytrackv1alpha1.OpGTE, Value: testCVSSSeven},
+						{Subject: dependencytrackv1alpha1.PolicyConditionSubjectSeverity, Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs, Value: testSeverityHigh},
 					},
 				},
 			}
@@ -1179,8 +1150,8 @@ var _ = Describe("Policy Controller", func() {
 				Name:           "Delete Fail Policy",
 				Uuid:           "del-fail-uuid-123",
 				Global:         boolPtr(true),
-				Operator:       policyOperatorAny,
-				ViolationState: testViolationReport,
+				Operator:       string(dependencytrackv1alpha1.PolicyOperatorAny),
+				ViolationState: string(dependencytrackv1alpha1.ViolationStateWarn),
 			}
 
 			res := &dependencytrackv1alpha1.Policy{
@@ -1189,11 +1160,11 @@ var _ = Describe("Policy Controller", func() {
 					Namespace: negNS,
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Delete Fail Policy",
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Delete Fail Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
-						{Type: dependencytrackv1alpha1.ConditionTypeCVSS, Comparator: dependencytrackv1alpha1.OpGTE, Value: testCVSSSeven},
+						{Subject: dependencytrackv1alpha1.PolicyConditionSubjectSeverity, Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs, Value: testSeverityHigh},
 					},
 				},
 			}
@@ -1235,8 +1206,8 @@ var _ = Describe("Policy Controller", func() {
 				Name:           "Auth Fail Policy",
 				Uuid:           "del-auth-uuid-123",
 				Global:         boolPtr(true),
-				Operator:       policyOperatorAny,
-				ViolationState: testViolationReport,
+				Operator:       string(dependencytrackv1alpha1.PolicyOperatorAny),
+				ViolationState: string(dependencytrackv1alpha1.ViolationStateWarn),
 			}
 
 			res := &dependencytrackv1alpha1.Policy{
@@ -1245,11 +1216,11 @@ var _ = Describe("Policy Controller", func() {
 					Namespace: negNS,
 				},
 				Spec: dependencytrackv1alpha1.PolicySpec{
-					Name:          "Auth Fail Policy",
-					Priority:      dependencytrackv1alpha1.PriorityHigh,
-					FailureAction: dependencytrackv1alpha1.FailureActionReport,
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Auth Fail Policy",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
 					Conditions: []dependencytrackv1alpha1.PolicyCondition{
-						{Type: dependencytrackv1alpha1.ConditionTypeCVSS, Comparator: dependencytrackv1alpha1.OpGTE, Value: testCVSSSeven},
+						{Subject: dependencytrackv1alpha1.PolicyConditionSubjectSeverity, Operator: dependencytrackv1alpha1.PolicyConditionOperatorIs, Value: testSeverityHigh},
 					},
 				},
 			}

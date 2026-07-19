@@ -19,9 +19,6 @@ spec:
     - jsonPath: .status.uuid
       name: UUID
       type: string
-    - jsonPath: .spec.priority
-      name: Priority
-      type: string
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
@@ -59,85 +56,68 @@ spec:
                 items:
                   description: PolicyCondition defines a single condition within a Policy.
                   properties:
-                    comparator:
-                      description: Comparator is the comparison operator applied to
-                        the condition value.
+                    operator:
+                      description: Operator specifies whether the subject is or is not
+                        the configured value.
                       enum:
-                      - GT
-                      - GTE
-                      - LT
-                      - LTE
-                      - EQ
-                      - NE
+                      - IS
+                      - IS_NOT
                       type: string
-                    isSuppression:
-                      default: false
-                      description: |-
-                        IsSuppression when true indicates this condition suppresses (allows)
-                        matching findings rather than blocking them.
-                      type: boolean
-                    type:
-                      description: Type specifies the kind of component to evaluate
-                        (e.g. CVSS, SEVERITY, LICENSE).
+                    subject:
+                      description: Subject specifies the Dependency-Track property to
+                        evaluate.
                       enum:
-                      - CVSS
-                      - VULNERABILITY
-                      - LICENSE
+                      - AGE
+                      - COORDINATES
                       - CPE
-                      - PURL
-                      - PACKAGE
-                      - PACKAGE_TYPE
+                      - EXPRESSION
+                      - LICENSE
+                      - LICENSE_GROUP
+                      - PACKAGE_URL
                       - SEVERITY
-                      - CREATED_BEFORE
+                      - SWID_TAGID
+                      - VERSION
+                      - COMPONENT_HASH
+                      - CWE
+                      - VULNERABILITY_ID
+                      - VERSION_DISTANCE
+                      - EPSS
                       type: string
                     value:
-                      description: |-
-                        Value is the value to compare against.
-                        The interpretation depends on the Type:
-                          - CVSS/SEVERITY: numeric threshold (e.g. "7.0")
-                          - LICENSE: license identifier string
-                          - CPE/PURL/PACKAGE: pattern to match
+                      description: Value is the value compared against the subject.
                       type: string
                   required:
-                  - comparator
-                  - type
+                  - operator
+                  - subject
                   - value
                   type: object
                 minItems: 1
                 type: array
-              description:
-                description: Description is an optional human-readable description of
-                  the policy.
-                maxLength: 1024
-                type: string
-              failureAction:
-                description: FailureAction defines what happens when policy conditions
-                  are violated.
-                enum:
-                - BLOCK_RELEASE
-                - BLOCK_DEPLOY
-                - REPORT
-                - IGNORE
-                type: string
               name:
                 description: Name is the human-readable name of the policy.
                 maxLength: 255
                 minLength: 1
                 type: string
-              priority:
-                description: Priority defines the severity level of this policy.
+              operator:
+                description: Operator defines whether any or all policy conditions must
+                  match.
                 enum:
-                - CRITICAL
-                - HIGH
-                - MEDIUM
-                - LOW
+                - ANY
+                - ALL
+                type: string
+              violationState:
+                description: ViolationState defines the severity assigned when policy
+                  conditions are violated.
+                enum:
                 - INFO
+                - WARN
+                - FAIL
                 type: string
             required:
             - conditions
-            - failureAction
             - name
-            - priority
+            - operator
+            - violationState
             type: object
           status:
             description: PolicyStatus defines the observed state of Policy.

@@ -86,13 +86,12 @@ Creates and manages a global **Policy** and its conditions in DependencyTrack. T
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `spec.name` | string | Yes | Human-readable policy name; must be globally unique in DependencyTrack |
-| `spec.description` | string | No | Human-readable description of the policy |
-| `spec.priority` | string | Yes | Policy priority: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, or `INFO` |
-| `spec.failureAction` | string | Yes | Action for violations: `BLOCK_RELEASE`, `BLOCK_DEPLOY`, `REPORT`, or `IGNORE` |
+| `spec.operator` | string | Yes | Condition matching mode: `ANY` if one condition must match, or `ALL` if every condition must match |
+| `spec.violationState` | string | Yes | Dependency-Track violation state: `INFO` (Inform), `WARN` (Warn), or `FAIL` (Fail) |
 | `spec.conditions` | []PolicyCondition | Yes | One or more inline conditions evaluated by DependencyTrack |
-| `spec.conditions[].type` | string | Yes | DependencyTrack condition subject, such as `SEVERITY`, `LICENSE`, `CPE`, `PURL`, or `VULNERABILITY` |
-| `spec.conditions[].comparator` | string | Yes | Comparison operator: `EQ`, `NE`, `GT`, `GTE`, `LT`, or `LTE` |
-| `spec.conditions[].value` | string | Yes | Value compared by the condition |
+| `spec.conditions[].subject` | string | Yes | Dependency-Track subject, such as `SEVERITY`, `LICENSE`, `CPE`, `PACKAGE_URL`, or `VULNERABILITY_ID` |
+| `spec.conditions[].operator` | string | Yes | Comparison operator: `IS` or `IS_NOT` |
+| `spec.conditions[].value` | string | Yes | Value compared against the subject |
 | `status.uuid` | string | — | DependencyTrack UUID used as the authoritative remote identity |
 | `status.conditions` | []Condition | — | Reconciliation state |
 
@@ -106,18 +105,17 @@ metadata:
   namespace: default
 spec:
   name: Critical Vulnerability Policy
-  description: Report components with critical vulnerabilities
-  priority: CRITICAL
-  failureAction: REPORT
+  operator: ANY
+  violationState: WARN
   conditions:
-    - type: SEVERITY
-      comparator: EQ
+    - subject: SEVERITY
+      operator: IS
       value: CRITICAL
 ```
 
 The operator creates the policy first and then persists each inline condition through DependencyTrack's condition API. It records the remote UUID in `status.uuid`, uses that UUID for subsequent updates and deletion, and reports failures through the `Ready` status condition.
 
-> **Dependency-Track v5.0.2 compatibility:** use subjects and condition behavior supported by that release. In particular, `CVSS` conditions and suppression conditions (`isSuppression: true`) are not supported by Dependency-Track v5.0.2. The aliases `PURL` and `VULNERABILITY` are translated to `PACKAGE_URL` and `VULNERABILITY_ID` respectively.
+> **Dependency-Track v5.0.2 compatibility:** condition subjects use Dependency-Track's native names. `CVSS` and suppression conditions are not supported; use a supported subject such as `SEVERITY`, `LICENSE`, `PACKAGE_URL`, or `VULNERABILITY_ID`.
 
 ## Getting Started
 

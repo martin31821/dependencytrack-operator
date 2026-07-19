@@ -469,7 +469,7 @@ func TestPolicyCRDSchemaIntegrity(t *testing.T) {
 
 	// Verify required spec fields exist
 	requiredFields := getRequiredFields(specProps)
-	expectedRequired := []string{"name", "priority", "failureAction", "conditions"}
+	expectedRequired := []string{"name", "operator", "violationState", "conditions"}
 	for _, expected := range expectedRequired {
 		found := false
 		for _, rf := range requiredFields {
@@ -501,7 +501,10 @@ func TestPolicyCRDSchemaIntegrity(t *testing.T) {
 	// Verify conditions items have required fields
 	items := getNestedMap(conditionsProps, "items")
 	condRequired := getRequiredFields(items)
-	condExpected := []string{"type", "comparator", "value"}
+	condExpected := []string{"subject", "operator", "value"}
+	if len(condRequired) != len(condExpected) {
+		t.Errorf("conditions[].required=%v, expected exactly %v", condRequired, condExpected)
+	}
 	for _, expected := range condExpected {
 		found := false
 		for _, rf := range condRequired {
@@ -513,6 +516,15 @@ func TestPolicyCRDSchemaIntegrity(t *testing.T) {
 		if !found {
 			t.Errorf("conditions[].required missing: %s", expected)
 		}
+	}
+
+	conditionProps := getNestedMap(items, "properties")
+	if len(conditionProps) != len(condExpected) {
+		t.Errorf("conditions[].properties=%v, expected exactly %v", conditionProps, condExpected)
+	}
+	conditionOperators := getStringSlice(getNestedMap(conditionProps, "operator"), "enum")
+	if strings.Join(conditionOperators, ",") != "IS,IS_NOT" {
+		t.Errorf("conditions[].operator enum=%v, expected [IS IS_NOT]", conditionOperators)
 	}
 
 	// Verify status.uuid is a string type
