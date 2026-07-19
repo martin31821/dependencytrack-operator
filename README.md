@@ -22,7 +22,7 @@ closed in upstream DependencyTrack.
 
 ## Custom Resources
 
-The operator provides two CRDs in the `dependencytrack.mko.dev/v1alpha1` API group.
+The operator provides three CRDs in the `dependencytrack.mko.dev/v1alpha1` API group.
 
 ### Team
 
@@ -78,6 +78,46 @@ spec:
 ```
 
 After reconciliation, the operator creates a `Secret` with the API key value. The `Team` must exist before the `APIKey` is reconciled — the controller references the `Team` by name to create the key under that team in DependencyTrack.
+
+### Policy
+
+Creates and manages a global **Policy** and its conditions in DependencyTrack. The Kubernetes resource is namespaced, but DependencyTrack policies are global; policy names must therefore be unique across all namespaces managed by the operator.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `spec.name` | string | Yes | Human-readable policy name; must be globally unique in DependencyTrack |
+| `spec.description` | string | No | Human-readable description of the policy |
+| `spec.priority` | string | Yes | Policy priority: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, or `INFO` |
+| `spec.failureAction` | string | Yes | Action for violations: `BLOCK_RELEASE`, `BLOCK_DEPLOY`, `REPORT`, or `IGNORE` |
+| `spec.conditions` | []PolicyCondition | Yes | One or more inline conditions evaluated by DependencyTrack |
+| `spec.conditions[].type` | string | Yes | DependencyTrack condition subject, such as `SEVERITY`, `LICENSE`, `CPE`, `PURL`, or `VULNERABILITY` |
+| `spec.conditions[].comparator` | string | Yes | Comparison operator: `EQ`, `NE`, `GT`, `GTE`, `LT`, or `LTE` |
+| `spec.conditions[].value` | string | Yes | Value compared by the condition |
+| `status.uuid` | string | — | DependencyTrack UUID used as the authoritative remote identity |
+| `status.conditions` | []Condition | — | Reconciliation state |
+
+**Example:**
+
+```yaml
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Policy
+metadata:
+  name: critical-vulnerability-policy
+  namespace: default
+spec:
+  name: Critical Vulnerability Policy
+  description: Report components with critical vulnerabilities
+  priority: CRITICAL
+  failureAction: REPORT
+  conditions:
+    - type: SEVERITY
+      comparator: EQ
+      value: CRITICAL
+```
+
+The operator creates the policy first and then persists each inline condition through DependencyTrack's condition API. It records the remote UUID in `status.uuid`, uses that UUID for subsequent updates and deletion, and reports failures through the `Ready` status condition.
+
+> **Dependency-Track v5.0.2 compatibility:** use subjects and condition behavior supported by that release. In particular, `CVSS` conditions and suppression conditions (`isSuppression: true`) are not supported by Dependency-Track v5.0.2. The aliases `PURL` and `VULNERABILITY` are translated to `PACKAGE_URL` and `VULNERABILITY_ID` respectively.
 
 ## Getting Started
 
