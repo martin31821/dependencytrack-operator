@@ -65,10 +65,6 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
-		By("copying DependencyTrack credentials into the operator namespace")
-		err = utils.CopySecretToNamespace("deptrack-credentials", "dependency-track", namespace)
-		Expect(err).NotTo(HaveOccurred(), "Failed to copy DependencyTrack credentials")
-
 		projectDir, err := utils.GetProjectDir()
 		Expect(err).NotTo(HaveOccurred(), "Failed to locate project directory")
 		dtURL := utils.DependencyTrackHost()
@@ -92,6 +88,33 @@ var _ = Describe("Manager", Ordered, func() {
 		}
 		Eventually(verifyManagerStarted, 2*time.Minute).Should(Succeed())
 
+		By("waiting for password rotation to complete")
+		err = utils.WaitForPasswordRotation("deptrack-credentials", namespace, 2*time.Minute)
+		Expect(err).NotTo(HaveOccurred(), "Password rotation did not complete")
+
+		By("restarting the operator pod to pick up the rotated password")
+		_, err = utils.Run(exec.Command("kubectl", "rollout", "restart",
+			"deployment/deptrack-operator-controller-manager", "-n", namespace))
+		Expect(err).NotTo(HaveOccurred(), "Failed to restart operator deployment")
+
+		By("waiting for the operator pod to be ready again after restart")
+		verifyPodReady := func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "deployment",
+				"deptrack-operator-controller-manager", "-n", namespace,
+				"-o", "jsonpath={.status.readyReplicas}")
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(output).To(Equal("1"), "Operator pod is not ready after restart")
+			// Update controllerPodName so AfterEach collects logs from the new pod
+			podOut, err := utils.Run(exec.Command("kubectl", "get", "pods",
+				"-l", "control-plane=controller-manager", "-n", namespace,
+				"-o", "jsonpath={.items[0].metadata.name}"))
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(podOut).NotTo(BeEmpty())
+			controllerPodName = podOut
+		}
+		Eventually(verifyPodReady, 2*time.Minute).Should(Succeed())
+
 		By("recording the controller-manager pod name for failure diagnostics")
 		podOutput, err := utils.Run(exec.Command("kubectl", "get", "pods",
 			"-l", "control-plane=controller-manager", "-n", namespace,
@@ -99,25 +122,6 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(podOutput).NotTo(BeEmpty())
 		controllerPodName = podOutput
-	})
-
-	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
-	// and deleting the namespace.
-	AfterAll(func() {
-		By("cleaning up the curl pod for metrics")
-		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
-		_, _ = utils.Run(cmd)
-
-		By("cleaning up the metrics ClusterRoleBinding")
-		cmd = exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName)
-		_, _ = utils.Run(cmd)
-
-		By("uninstalling the packaged operator Helm release")
-		utils.UninstallOperatorHelm(namespace)
-
-		By("removing manager namespace")
-		cmd = exec.Command("kubectl", "delete", "ns", namespace)
-		_, _ = utils.Run(cmd)
 	})
 
 	// After each test, check for failures and collect logs, events,

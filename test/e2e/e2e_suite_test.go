@@ -85,7 +85,7 @@ var _ = BeforeSuite(func() {
 	}
 
 	// Deploy a real DependencyTrack instance via Helm so the operator can
-	// reconcile Team and APIKey CRs against a live backend.
+	// reconcile CRs against a live backend.
 	By("installing DependencyTrack via Helm")
 	Expect(utils.InstallDependencyTrack()).To(Succeed(), "Failed to install DependencyTrack")
 })

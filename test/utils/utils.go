@@ -17,7 +17,7 @@ limitations under the License.
 package utils
 
 import (
-	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -393,7 +393,7 @@ func InstallDependencyTrack() error {
 		return fmt.Errorf("close DependencyTrack Helm values: %w", err)
 	}
 
-	installCmd := exec.Command("helm", "install", "my-dependency-track",
+	installCmd := exec.Command("helm", "upgrade", "--install", "my-dependency-track",
 		"dependencytrack/dependency-track",
 		"--version", "2.0.0-rc.2",
 		"--namespace", "dependency-track",
@@ -439,33 +439,6 @@ func InstallDependencyTrack() error {
 		return fmt.Errorf("DependencyTrack API not ready after 2 minutes: %w", lastErr)
 	}
 
-	// Create the deptrack-credentials secret so the operator controller can
-	// authenticate with DependencyTrack. The DT Helm chart creates an admin
-	// user; we mirror its credentials in a secret the operator reads.
-	_, _ = fmt.Fprintf(GinkgoWriter, "Creating deptrack-credentials secret...\\n")
-	credsManifest := `apiVersion: v1
-kind: Secret
-metadata:
-  name: deptrack-credentials
-  namespace: dependency-track
-type: Opaque
-stringData:
-  username: admin
-  password: admin`
-	credsTmp, err := os.CreateTemp("", "dt-creds-*.yaml")
-	if err != nil {
-		return fmt.Errorf("create creds temp file: %w", err)
-	}
-	_, _ = credsTmp.WriteString(credsManifest)
-	if err := credsTmp.Close(); err != nil {
-		return fmt.Errorf("close creds manifest: %w", err)
-	}
-	_, err = Run(exec.Command("kubectl", "apply", "-f", credsTmp.Name()))
-	if err != nil {
-		_ = os.Remove(credsTmp.Name())
-		return fmt.Errorf("apply credentials secret: %w", err)
-	}
-	_ = os.Remove(credsTmp.Name())
 	return nil
 }
 
@@ -488,47 +461,45 @@ func UninstallDependencyTrack() {
 	_, _ = fmt.Fprintf(GinkgoWriter, "DependencyTrack uninstalled.\\n")
 }
 
-// CopySecretToNamespace copies a Secret without exposing its data in command
-// arguments or test logs. Server-assigned metadata is removed before applying
-// the copy in the target namespace.
-func CopySecretToNamespace(name, sourceNamespace, targetNamespace string) error {
-	getCmd := exec.Command("kubectl", "get", "secret", name,
-		"--namespace", sourceNamespace, "--output", "json")
-	secretJSON, err := getCmd.Output()
-	if err != nil {
-		return fmt.Errorf("get secret %s/%s: %w", sourceNamespace, name, err)
-	}
+// minPasswordLen mirrors the constant in internal/auth/rotator.go so we
+// can detect when PasswordRotationRunnable has finished rotating.
+const minPasswordLen = 30
 
-	var secret map[string]any
-	if err := json.Unmarshal(secretJSON, &secret); err != nil {
-		return fmt.Errorf("decode secret %s/%s: %w", sourceNamespace, name, err)
+// WaitForPasswordRotation polls the operator namespace for the credentials
+// secret and blocks until the password has been rotated to at least
+// minPasswordLen characters (the minimum enforced by
+// PasswordRotationRunnable).
+func WaitForPasswordRotation(secretName, namespace string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		cmd := exec.Command("kubectl", "get", "secret", secretName, "-n", namespace,
+			"-o", "jsonpath={.data.password}")
+		out, err := Run(cmd)
+		if err != nil {
+			// Secret may not exist yet (PasswordRotationRunnable creates it).
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		// Decode base64 password and check length.
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(out))
+		if err != nil {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		if len(decoded) >= minPasswordLen {
+			return nil
+		}
+		time.Sleep(2 * time.Second)
 	}
-	metadata, ok := secret["metadata"].(map[string]any)
-	if !ok {
-		return fmt.Errorf("secret %s/%s has no metadata", sourceNamespace, name)
-	}
-	metadata["namespace"] = targetNamespace
-	for _, field := range []string{
-		"creationTimestamp", "managedFields", "resourceVersion", "selfLink", "uid",
-	} {
-		delete(metadata, field)
-	}
-
-	copyJSON, err := json.Marshal(secret)
-	if err != nil {
-		return fmt.Errorf("encode secret copy %s/%s: %w", targetNamespace, name, err)
-	}
-	applyCmd := exec.Command("kubectl", "apply", "--filename", "-")
-	applyCmd.Stdin = bytes.NewReader(copyJSON)
-	if _, err := Run(applyCmd); err != nil {
-		return fmt.Errorf("apply secret %s/%s: %w", targetNamespace, name, err)
-	}
-	return nil
+	return fmt.Errorf("password rotation timed out after %v", timeout)
 }
 
-// InstallOperatorHelm installs the packaged operator chart with the locally
-// built image and live Dependency-Track endpoint used by the e2e suite.
-func InstallOperatorHelm(projectDir, image, deptrackURL, namespace string) error {
+// DeployOperatorHelm installs the operator Helm chart with the given project
+// directory, image reference, DependencyTrack endpoint, and target namespace.
+// It overrides the default image (controller:latest) with the provided image
+// and sets imagePullPolicy to IfNotPresent so the locally-loaded Kind image
+// is used instead of pulling from a registry.
+func DeployOperatorHelm(projectDir, image, deptrackURL, namespace string) error {
 	repository, tag, err := splitImage(image)
 	if err != nil {
 		return err
@@ -545,6 +516,50 @@ func InstallOperatorHelm(projectDir, image, deptrackURL, namespace string) error
 		"--wait", "--timeout", "3m")
 	if _, err := Run(cmd); err != nil {
 		return fmt.Errorf("helm install operator: %w", err)
+	}
+	return nil
+}
+
+// DeleteOperatorHelm removes the operator Helm release from the given namespace.
+func DeleteOperatorHelm(namespace string) {
+	_, _ = Run(exec.Command("helm", "uninstall", "deptrack-operator", "--namespace", namespace))
+}
+
+// OperatorPodReady checks whether the controller-manager deployment has at
+// least one ready replica in the given namespace.
+func OperatorPodReady(namespace string) bool {
+	cmd := exec.Command("kubectl", "get", "deployment",
+		"deptrack-operator-controller-manager",
+		"-n", namespace, "-o", "jsonpath={.status.readyReplicas}")
+	out, err := Run(cmd)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(out) == "1"
+}
+
+// InstallOperatorHelm installs the packaged operator chart with the locally
+// built image and live Dependency-Track endpoint used by the e2e suite.
+// Uses helm upgrade --install so it is idempotent when called multiple times
+// (e.g. when the notification lifecycle tests deploy the operator first and
+// the Manager BeforeAll runs later).
+func InstallOperatorHelm(projectDir, image, deptrackURL, namespace string) error {
+	repository, tag, err := splitImage(image)
+	if err != nil {
+		return err
+	}
+	chartPath := filepath.Join(projectDir, "deploy", "charts", "dependencytrack-operator")
+	cmd := exec.Command("helm", "upgrade", "--install", "deptrack-operator", chartPath,
+		"--namespace", namespace,
+		"--set", "fullnameOverride=deptrack-operator",
+		"--set", "controllerManager.manager.image.repository="+repository,
+		"--set", "controllerManager.manager.image.tag="+tag,
+		"--set", "controllerManager.manager.image.pullPolicy=IfNotPresent",
+		"--set", "controllerManager.manager.env.deptrackUrl="+deptrackURL,
+		"--set", "controllerManager.manager.env.deptrackCredentialsSecret=deptrack-credentials",
+		"--wait", "--timeout", "3m")
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("helm upgrade --install operator: %w", err)
 	}
 	return nil
 }
