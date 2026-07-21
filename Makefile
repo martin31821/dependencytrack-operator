@@ -61,18 +61,17 @@ KIND ?= kind
 KIND_CLUSTER ?= deptrack-operator-test-e2e
 
 .PHONY: setup-test-e2e
-setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
+setup-test-e2e: ## Set up an isolated Kind cluster for e2e tests (always creates fresh)
 	@command -v $(KIND) >/dev/null 2>&1 || { \
 		echo "Kind is not installed. Please install Kind manually."; \
 		exit 1; \
 	}
-	@case "$$($(KIND) get clusters)" in \
-		*"$(KIND_CLUSTER)"*) \
-			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping creation." ;; \
-		*) \
-			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
-			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
-	esac
+	@if [ "$$($(KIND) get clusters 2>/dev/null)" = "$(KIND_CLUSTER)" ]; then \
+		echo "Deleting existing Kind cluster '$(KIND_CLUSTER)' for a clean run..."; \
+		$(KIND) delete cluster --name $(KIND_CLUSTER) 2>/dev/null || true; \
+	fi
+	@echo "Creating Kind cluster '$(KIND_CLUSTER)'..."
+	$(KIND) create cluster --name $(KIND_CLUSTER)
 
 .PHONY: test-distribution
 test-distribution: ## Run distribution contract tests between kustomize and Helm chart artifacts.
