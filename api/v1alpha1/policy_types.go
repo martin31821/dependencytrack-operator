@@ -64,12 +64,23 @@ const (
 )
 
 // PolicyConditionOperator defines how a condition compares its subject to its value.
-// +kubebuilder:validation:Enum=IS;IS_NOT
+// Values match the Dependency-Track PolicyCondition API.
+// +kubebuilder:validation:Enum=IS;IS_NOT;MATCHES;NO_MATCH;NUMERIC_GREATER_THAN;NUMERIC_LESS_THAN;NUMERIC_EQUAL;NUMERIC_NOT_EQUAL;NUMERIC_GREATER_THAN_OR_EQUAL;NUMERIC_LESSER_THAN_OR_EQUAL;CONTAINS_ALL;CONTAINS_ANY
 type PolicyConditionOperator string
 
 const (
-	PolicyConditionOperatorIs    PolicyConditionOperator = "IS"
-	PolicyConditionOperatorIsNot PolicyConditionOperator = "IS_NOT"
+	PolicyConditionOperatorIs                        PolicyConditionOperator = "IS"
+	PolicyConditionOperatorIsNot                     PolicyConditionOperator = "IS_NOT"
+	PolicyConditionOperatorMatches                   PolicyConditionOperator = "MATCHES"
+	PolicyConditionOperatorNoMatch                   PolicyConditionOperator = "NO_MATCH"
+	PolicyConditionOperatorNumericGreaterThan        PolicyConditionOperator = "NUMERIC_GREATER_THAN"
+	PolicyConditionOperatorNumericLessThan           PolicyConditionOperator = "NUMERIC_LESS_THAN"
+	PolicyConditionOperatorNumericEqual              PolicyConditionOperator = "NUMERIC_EQUAL"
+	PolicyConditionOperatorNumericNotEqual           PolicyConditionOperator = "NUMERIC_NOT_EQUAL"
+	PolicyConditionOperatorNumericGreaterThanOrEqual PolicyConditionOperator = "NUMERIC_GREATER_THAN_OR_EQUAL"
+	PolicyConditionOperatorNumericLesserThanOrEqual  PolicyConditionOperator = "NUMERIC_LESSER_THAN_OR_EQUAL"
+	PolicyConditionOperatorContainsAll               PolicyConditionOperator = "CONTAINS_ALL"
+	PolicyConditionOperatorContainsAny               PolicyConditionOperator = "CONTAINS_ANY"
 )
 
 // PolicyCondition defines a single condition within a Policy.

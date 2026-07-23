@@ -523,9 +523,30 @@ func TestPolicyCRDSchemaIntegrity(t *testing.T) {
 		t.Errorf("conditions[].properties=%v, expected exactly %v", conditionProps, condExpected)
 	}
 	conditionOperators := getStringSlice(getNestedMap(conditionProps, "operator"), "enum")
-	if strings.Join(conditionOperators, ",") != "IS,IS_NOT" {
-		t.Errorf("conditions[].operator enum=%v, expected [IS IS_NOT]", conditionOperators)
+	expectedOperators := []string{
+		"IS", "IS_NOT", "MATCHES", "NO_MATCH",
+		"NUMERIC_GREATER_THAN", "NUMERIC_LESS_THAN", "NUMERIC_EQUAL", "NUMERIC_NOT_EQUAL",
+		"NUMERIC_GREATER_THAN_OR_EQUAL", "NUMERIC_LESSER_THAN_OR_EQUAL",
+		"CONTAINS_ALL", "CONTAINS_ANY",
 	}
+	if len(conditionOperators) != len(expectedOperators) {
+		t.Errorf("conditions[].operator has %d values, expected %d: got %v", len(conditionOperators), len(expectedOperators), conditionOperators)
+	}
+	expectedOpSet := make(map[string]bool)
+	for _, op := range expectedOperators {
+		expectedOpSet[op] = true
+	}
+	for _, op := range conditionOperators {
+		if !expectedOpSet[op] {
+			t.Errorf("conditions[].operator unexpected value: %s", op)
+		}
+	}
+	for _, op := range expectedOperators {
+		if !expectedOpSet[op] {
+			t.Errorf("conditions[].operator missing expected value: %s", op)
+		}
+	}
+	_ = strings.Join // already imported
 
 	// Verify status.uuid is a string type
 	statusProps := getNestedMap(schema, "properties", "status")

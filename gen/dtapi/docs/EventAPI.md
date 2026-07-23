@@ -1,16 +1,16 @@
 # \EventAPI
 
-All URIs are relative to *https://hyades-api.iris-flair-alpha.vlair-staging.defra01.iris-sensing.net/api*
+All URIs are relative to */api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**IsTokenBeingProcessed**](EventAPI.md#IsTokenBeingProcessed) | **Get** /v1/event/token/{uuid} | Determines if there are any tasks associated with the token that are being processed, or in the queue to be processed.
+[**IsTokenBeingProcessed1**](EventAPI.md#IsTokenBeingProcessed1) | **Get** /v1/event/token/{uuid} | Determines if there are any tasks associated with the token that are being processed, or in the queue to be processed.
 
 
 
-## IsTokenBeingProcessed
+## IsTokenBeingProcessed1
 
-> IsTokenBeingProcessedResponse IsTokenBeingProcessed(ctx, uuid).Execute()
+> IsTokenBeingProcessedResponse IsTokenBeingProcessed1(ctx, uuid).Execute()
 
 Determines if there are any tasks associated with the token that are being processed, or in the queue to be processed.
 
@@ -25,7 +25,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -33,13 +33,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.EventAPI.IsTokenBeingProcessed(context.Background(), uuid).Execute()
+	resp, r, err := apiClient.EventAPI.IsTokenBeingProcessed1(context.Background(), uuid).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `EventAPI.IsTokenBeingProcessed``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `EventAPI.IsTokenBeingProcessed1``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `IsTokenBeingProcessed`: IsTokenBeingProcessedResponse
-	fmt.Fprintf(os.Stdout, "Response from `EventAPI.IsTokenBeingProcessed`: %v\n", resp)
+	// response from `IsTokenBeingProcessed1`: IsTokenBeingProcessedResponse
+	fmt.Fprintf(os.Stdout, "Response from `EventAPI.IsTokenBeingProcessed1`: %v\n", resp)
 }
 ```
 
@@ -53,7 +53,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiIsTokenBeingProcessedRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiIsTokenBeingProcessed1Request struct via the builder pattern
 
 
 Name | Type | Description  | Notes

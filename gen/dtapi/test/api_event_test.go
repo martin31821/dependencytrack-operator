@@ -22,13 +22,13 @@ func Test_dtapi_EventAPIService(t *testing.T) {
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
 
-	t.Run("Test EventAPIService IsTokenBeingProcessed", func(t *testing.T) {
+	t.Run("Test EventAPIService IsTokenBeingProcessed1", func(t *testing.T) {
 
 		t.Skip("skip test") // remove to run test
 
 		var uuid string
 
-		resp, httpRes, err := apiClient.EventAPI.IsTokenBeingProcessed(context.Background(), uuid).Execute()
+		resp, httpRes, err := apiClient.EventAPI.IsTokenBeingProcessed1(context.Background(), uuid).Execute()
 
 		require.Nil(t, err)
 		require.NotNil(t, resp)

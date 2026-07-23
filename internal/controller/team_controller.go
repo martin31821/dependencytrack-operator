@@ -37,8 +37,7 @@ import (
 )
 
 const (
-	teamFinalizer       = "dependencytrack.mko.dev/finalizer"
-	conditionReconciled = "Reconciled"
+	teamFinalizer = "dependencytrack.mko.dev/finalizer"
 )
 
 // TeamReconciler reconciles a Team object
@@ -248,10 +247,10 @@ func (r *TeamReconciler) failStatus(ctx context.Context, team *dependencytrackv1
 	return ctrl.Result{}, cause
 }
 
-// setCondition upserts the Reconciled condition on the team's status.
+// setCondition upserts the Ready condition on the team's status.
 func setCondition(team *dependencytrackv1alpha1.Team, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&team.Status.Conditions, metav1.Condition{
-		Type:               conditionReconciled,
+		Type:               conditionReady,
 		Status:             status,
 		Reason:             reason,
 		Message:            message,

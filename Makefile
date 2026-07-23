@@ -51,7 +51,7 @@ fmt: ## Run go fmt against code.
 
 .PHONY: test
 test: manifests generate fmt envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell setup-envtest use $(ENVTEST_K8S_VERSION) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell setup-envtest use $(ENVTEST_K8S_VERSION) -p path)" go test $$(go list ./... | grep -v -e /e2e -e /gen/dtapi/test -e /gen/dtv2/test) -coverprofile cover.out
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
@@ -59,6 +59,12 @@ test: manifests generate fmt envtest ## Run tests.
 # - CERT_MANAGER_INSTALL_SKIP=true
 KIND ?= kind
 KIND_CLUSTER ?= deptrack-operator-test-e2e
+
+# E2E cluster preservation (fast iteration between runs):
+#   E2E_SKIP_CLUSTER_TEARDOWN=true  – keep the Kind cluster after tests
+#   E2E_SKIP_DT_TEARDOWN=true       – keep DependencyTrack between suite runs
+# When both are true, only teardown the operator (if the main AfterSuite runs),
+# making it possible to iterate on operator code without rebuilding DT.
 
 .PHONY: setup-test-e2e
 setup-test-e2e: ## Set up an isolated Kind cluster for e2e tests (always creates fresh)
@@ -80,11 +86,27 @@ test-distribution: ## Run distribution contract tests between kustomize and Helm
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt ## Run the e2e tests. Expected an isolated environment using Kind.
 	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v
-	$(MAKE) cleanup-test-e2e
+
+.PHONY: test-e2e-fast
+test-e2e-fast: manifests generate fmt ## Run e2e tests preserving the Kind cluster (fast iteration).
+	@if [ "$$($(KIND) get clusters 2>/dev/null)" != "$(KIND_CLUSTER)" ]; then \
+		echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
+		$(KIND) create cluster --name $(KIND_CLUSTER); \
+	fi
+	E2E_SKIP_CLUSTER_TEARDOWN=true \
+	E2E_SKIP_DT_TEARDOWN=true \
+	KIND_CLUSTER=$(KIND_CLUSTER) \
+	go test ./test/e2e/ -v -ginkgo.v
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
+
+.PHONY: cleanup-e2e-services
+cleanup-e2e-services: ## Remove DT and operator Helm releases from the preserved cluster
+	helm uninstall my-dependency-track --namespace dependency-track || true
+	helm uninstall deptrack-operator --namespace deptrack-operator-system || true
+	kubectl delete namespace dependency-track deptrack-operator-system --ignore-not-found=true || true
 
 .PHONY: lint
 lint: ## Run golangci-lint linter

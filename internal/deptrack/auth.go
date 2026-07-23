@@ -29,6 +29,17 @@ import (
 	"github.com/martin31821/dependencytrack-operator/gen/dtapi"
 )
 
+// NewAPIClient returns a DependencyTrack API client pointed at baseURL.
+// The baseURL should not include a trailing /api — this function appends it
+// because the OpenAPI codegen default server URLs all end with /api.
+func NewAPIClient(baseURL string) *dtapi.APIClient {
+	cfg := dtapi.NewConfiguration()
+	cfg.Servers = dtapi.ServerConfigurations{
+		{URL: baseURL + "/api"},
+	}
+	return dtapi.NewAPIClient(cfg)
+}
+
 // tokenTTL is how long we reuse a cached bearer token before re-authenticating.
 // DependencyTrack tokens are valid for 24 h; we refresh early to avoid expiry mid-operation.
 const tokenTTL = time.Hour
@@ -37,6 +48,7 @@ const tokenTTL = time.Hour
 // tests can inject a mock provider without depending on Kubernetes.
 type ClientProviderInterface interface {
 	Get(ctx context.Context) (context.Context, *dtapi.APIClient, error)
+	Invalidate()
 }
 
 // ClientProvider authenticates with DependencyTrack and caches the bearer token.

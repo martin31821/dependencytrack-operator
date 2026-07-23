@@ -1,6 +1,6 @@
 # \MetricsAPI
 
-All URIs are relative to *https://hyades-api.iris-flair-alpha.vlair-staging.defra01.iris-sensing.net/api*
+All URIs are relative to */api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
@@ -37,7 +37,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -107,12 +107,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
 	uuid := "38400000-8cf0-11bd-b23e-10b96e4ef00d" // string | The UUID of the component to retrieve metrics for
-	date := "date_example" // string | The start date to retrieve metrics for
+	date := "date_example" // string | The start date (UTC) to retrieve metrics for
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -133,7 +133,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
 **uuid** | **string** | The UUID of the component to retrieve metrics for | 
-**date** | **string** | The start date to retrieve metrics for | 
+**date** | **string** | The start date (UTC) to retrieve metrics for | 
 
 ### Other Parameters
 
@@ -180,7 +180,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -253,7 +253,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -314,7 +314,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -384,7 +384,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -454,7 +454,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -524,12 +524,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
 	uuid := "38400000-8cf0-11bd-b23e-10b96e4ef00d" // string | The UUID of the project to retrieve metrics for
-	date := "date_example" // string | The start date to retrieve metrics for
+	date := "date_example" // string | The start date (UTC) to retrieve metrics for
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -550,7 +550,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
 **uuid** | **string** | The UUID of the project to retrieve metrics for | 
-**date** | **string** | The start date to retrieve metrics for | 
+**date** | **string** | The start date (UTC) to retrieve metrics for | 
 
 ### Other Parameters
 
@@ -597,7 +597,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -670,7 +670,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -731,7 +731,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -799,7 +799,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -858,7 +858,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {

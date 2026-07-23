@@ -33,9 +33,6 @@ const (
 	prometheusOperatorVersion = "v0.77.1"
 	prometheusOperatorURL     = "https://github.com/prometheus-operator/prometheus-operator/" +
 		"releases/download/%s/bundle.yaml"
-
-	certmanagerVersion = "v1.16.3"
-	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 )
 
 var (
@@ -187,67 +184,6 @@ func IsPrometheusCRDsInstalled() bool {
 	}
 	crdList := GetNonEmptyLines(output)
 	for _, crd := range prometheusCRDs {
-		for _, line := range crdList {
-			if strings.Contains(line, crd) {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-// UninstallCertManager uninstalls the cert manager
-func UninstallCertManager() {
-	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.Command("kubectl", "delete", "-f", url)
-	if _, err := Run(cmd); err != nil {
-		warnError(err)
-	}
-}
-
-// InstallCertManager installs the cert manager bundle.
-func InstallCertManager() error {
-	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.Command("kubectl", "apply", "-f", url)
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-	// Wait for cert-manager-webhook to be ready, which can take time if cert-manager
-	// was re-installed after uninstalling on a cluster.
-	cmd = exec.Command("kubectl", "wait", "deployment.apps/cert-manager-webhook",
-		"--for", "condition=Available",
-		"--namespace", "cert-manager",
-		"--timeout", "5m",
-	)
-
-	_, err := Run(cmd)
-	return err
-}
-
-// IsCertManagerCRDsInstalled checks if any Cert Manager CRDs are installed
-// by verifying the existence of key CRDs related to Cert Manager.
-func IsCertManagerCRDsInstalled() bool {
-	// List of common Cert Manager CRDs
-	certManagerCRDs := []string{
-		"certificates.cert-manager.io",
-		"issuers.cert-manager.io",
-		"clusterissuers.cert-manager.io",
-		"certificaterequests.cert-manager.io",
-		"orders.acme.cert-manager.io",
-		"challenges.acme.cert-manager.io",
-	}
-
-	// Execute the kubectl command to get all CRDs
-	cmd := exec.Command("kubectl", "get", "crds")
-	output, err := Run(cmd)
-	if err != nil {
-		return false
-	}
-
-	// Check if any of the Cert Manager CRDs are present
-	crdList := GetNonEmptyLines(output)
-	for _, crd := range certManagerCRDs {
 		for _, line := range crdList {
 			if strings.Contains(line, crd) {
 				return true
@@ -442,6 +378,29 @@ func InstallDependencyTrack() error {
 	return nil
 }
 
+// IsDependencyTrackReady checks whether the DependencyTrack API pod is ready
+// by attempting to reach the readiness endpoint from a kubectl exec context.
+func IsDependencyTrackReady() bool {
+	cmd := exec.Command("kubectl", "exec",
+		"deployment/my-dependency-track-api-server",
+		"--namespace", "dependency-track",
+		"--", "curl", "--fail", "--silent", "--max-time", "3",
+		"--output", "/dev/null", "http://127.0.0.1:8080/api/version")
+	return cmd.Run() == nil
+}
+
+// InstallOrUpgradeDependencyTrack installs PostgreSQL and DependencyTrack if they
+// are not already present.  When DT is already running (detected via API probe)
+// this is a no-op so that preserved clusters skip the expensive install step.
+func InstallOrUpgradeDependencyTrack() error {
+	// Quick probe: if the API is already answering, skip installation.
+	if IsDependencyTrackReady() {
+		_, _ = fmt.Fprintf(GinkgoWriter, "DependencyTrack is already running – skipping install.\\n")
+		return nil
+	}
+	return InstallDependencyTrack()
+}
+
 // UninstallDependencyTrack removes the DependencyTrack Helm release and namespace.
 func UninstallDependencyTrack() {
 	_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling DependencyTrack...\\n")
@@ -564,12 +523,30 @@ func InstallOperatorHelm(projectDir, image, deptrackURL, namespace string) error
 	return nil
 }
 
+// IsOperatorDeployed checks whether the operator deployment exists in the given namespace.
+func IsOperatorDeployed(namespace string) bool {
+	cmd := exec.Command("kubectl", "get", "deployment",
+		"deptrack-operator-controller-manager", "-n", namespace)
+	return cmd.Run() == nil
+}
+
 // UpgradeOperatorHelm exercises the packaged chart upgrade path while retaining
 // the values used for the initial installation.
-func UpgradeOperatorHelm(projectDir, namespace string) error {
+func UpgradeOperatorHelm(projectDir, image, deptrackURL, namespace string) error {
+	repository, tag, err := splitImage(image)
+	if err != nil {
+		return err
+	}
 	chartPath := filepath.Join(projectDir, "deploy", "charts", "dependencytrack-operator")
 	cmd := exec.Command("helm", "upgrade", "deptrack-operator", chartPath,
-		"--namespace", namespace, "--reuse-values", "--wait", "--timeout", "3m")
+		"--namespace", namespace,
+		"--reuse-values",
+		"--set", "controllerManager.manager.image.repository="+repository,
+		"--set", "controllerManager.manager.image.tag="+tag,
+		"--set", "controllerManager.manager.image.pullPolicy=IfNotPresent",
+		"--set", "controllerManager.manager.env.deptrackUrl="+deptrackURL,
+		"--set", "controllerManager.manager.env.deptrackCredentialsSecret=deptrack-credentials",
+		"--wait", "--timeout", "3m")
 	if _, err := Run(cmd); err != nil {
 		return fmt.Errorf("helm upgrade operator: %w", err)
 	}
@@ -594,6 +571,22 @@ func splitImage(image string) (string, string, error) {
 // (e.g. http://my-dependency-track-api-server.dependency-track.svc.cluster.local:8080).
 func DependencyTrackHost() string {
 	return "http://my-dependency-track-api-server.dependency-track.svc.cluster.local:8080"
+}
+
+// DeleteKindCluster tears down the Kind cluster used by the e2e suite.
+// The cluster name comes from the KIND_CLUSTER environment variable
+// (defaulting to "kind").
+func DeleteKindCluster() {
+	cluster := "kind"
+	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
+		cluster = v
+	}
+	_, _ = fmt.Fprintf(GinkgoWriter, "Deleting Kind cluster %q...\n", cluster)
+	cmd := exec.Command("kind", "delete", "cluster", "--name", cluster)
+	if _, err := Run(cmd); err != nil {
+		warnError(fmt.Errorf("kind delete cluster: %w", err))
+	}
+	_, _ = fmt.Fprintf(GinkgoWriter, "Kind cluster %q deleted.\n", cluster)
 }
 
 // UncommentCode searches for target in the file and remove the comment prefix

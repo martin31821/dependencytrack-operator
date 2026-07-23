@@ -126,7 +126,7 @@ func TestPolicyStatusFields(t *testing.T) {
 				Type:               "Ready",
 				Status:             metav1.ConditionTrue,
 				LastTransitionTime: metav1.Now(),
-				Reason:             "PolicyReconciled",
+				Reason:             "PolicySynced",
 				Message:            "Policy synced to DependencyTrack",
 			},
 		},

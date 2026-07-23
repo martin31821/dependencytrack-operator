@@ -1,6 +1,6 @@
 # \UserAPI
 
-All URIs are relative to *https://hyades-api.iris-flair-alpha.vlair-staging.defra01.iris-sensing.net/api*
+All URIs are relative to */api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
@@ -44,7 +44,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -116,11 +116,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
-	ldapUser := *openapiclient.NewLdapUser("Dn_example", "Username_example") // LdapUser |  (optional)
+	ldapUser := *openapiclient.NewLdapUser("Username_example") // LdapUser |  (optional)
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -182,12 +182,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-    "time"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
-	managedUser := *openapiclient.NewManagedUser(time.Now(), "Username_example") // ManagedUser |  (optional)
+	managedUser := *openapiclient.NewManagedUser(int64(123), "Username_example") // ManagedUser |  (optional)
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -249,7 +248,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -315,11 +314,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
-	ldapUser := *openapiclient.NewLdapUser("Dn_example", "Username_example") // LdapUser |  (optional)
+	ldapUser := *openapiclient.NewLdapUser("Username_example") // LdapUser |  (optional)
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -379,12 +378,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-    "time"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
-	managedUser := *openapiclient.NewManagedUser(time.Now(), "Username_example") // ManagedUser |  (optional)
+	managedUser := *openapiclient.NewManagedUser(int64(123), "Username_example") // ManagedUser |  (optional)
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -444,7 +442,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -508,7 +506,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -578,7 +576,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -639,7 +637,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -700,7 +698,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -757,7 +755,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -818,7 +816,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -879,7 +877,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -943,7 +941,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -1015,7 +1013,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -1081,12 +1079,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-    "time"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
-	managedUser := *openapiclient.NewManagedUser(time.Now(), "Username_example") // ManagedUser |  (optional)
+	managedUser := *openapiclient.NewManagedUser(int64(123), "Username_example") // ManagedUser |  (optional)
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -1146,12 +1143,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-    "time"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
-	managedUser := *openapiclient.NewManagedUser(time.Now(), "Username_example") // ManagedUser |  (optional)
+	managedUser := *openapiclient.NewManagedUser(int64(123), "Username_example") // ManagedUser |  (optional)
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -1213,7 +1209,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -1281,7 +1277,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {

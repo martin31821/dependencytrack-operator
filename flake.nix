@@ -41,6 +41,7 @@
               kustomize
               kind
               operator-sdk
+              openapi-generator-cli
               podman
               setup-envtest
             ];

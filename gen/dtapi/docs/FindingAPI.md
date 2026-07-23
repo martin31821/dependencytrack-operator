@@ -1,75 +1,15 @@
 # \FindingAPI
 
-All URIs are relative to *https://hyades-api.iris-flair-alpha.vlair-staging.defra01.iris-sensing.net/api*
+All URIs are relative to */api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**AnalyzePortfolio**](FindingAPI.md#AnalyzePortfolio) | **Post** /v1/finding/portfolio/analyze | Triggers Vulnerability Analysis for the entire portfolio
 [**AnalyzeProject**](FindingAPI.md#AnalyzeProject) | **Post** /v1/finding/project/{uuid}/analyze | Triggers Vulnerability Analysis on a specific project
 [**ExportFindingsByProject**](FindingAPI.md#ExportFindingsByProject) | **Get** /v1/finding/project/{uuid}/export | Returns the findings for the specified project as FPF
 [**GetAllFindings**](FindingAPI.md#GetAllFindings) | **Get** /v1/finding/grouped | Returns a list of all findings grouped by vulnerability
 [**GetAllFindings1**](FindingAPI.md#GetAllFindings1) | **Get** /v1/finding | Returns a list of all findings
 [**GetFindingsByProject**](FindingAPI.md#GetFindingsByProject) | **Get** /v1/finding/project/{uuid} | Returns a list of all findings for a specific project or generates SARIF file if Accept: application/sarif+json header is provided
 
-
-
-## AnalyzePortfolio
-
-> AnalyzePortfolio(ctx).Execute()
-
-Triggers Vulnerability Analysis for the entire portfolio
-
-
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
-)
-
-func main() {
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	r, err := apiClient.FindingAPI.AnalyzePortfolio(context.Background()).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `FindingAPI.AnalyzePortfolio``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-}
-```
-
-### Path Parameters
-
-This endpoint does not need any parameter.
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiAnalyzePortfolioRequest struct via the builder pattern
-
-
-### Return type
-
- (empty response body)
-
-### Authorization
-
-[ApiKeyAuth](../README.md#ApiKeyAuth), [BearerAuth](../README.md#BearerAuth)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: Not defined
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
 
 
 ## AnalyzeProject
@@ -89,7 +29,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -159,7 +99,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -214,7 +154,7 @@ Name | Type | Description  | Notes
 
 ## GetAllFindings
 
-> []Finding GetAllFindings(ctx).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ShowInactive(showInactive).Severity(severity).PublishDateFrom(publishDateFrom).PublishDateTo(publishDateTo).TextSearchField(textSearchField).TextSearchInput(textSearchInput).Cvssv2From(cvssv2From).Cvssv2To(cvssv2To).Cvssv3From(cvssv3From).Cvssv3To(cvssv3To).EpssFrom(epssFrom).EpssTo(epssTo).EpssPercentileFrom(epssPercentileFrom).EpssPercentileTo(epssPercentileTo).OccurrencesFrom(occurrencesFrom).OccurrencesTo(occurrencesTo).Execute()
+> []Finding GetAllFindings(ctx).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ShowInactive(showInactive).Severity(severity).PublishDateFrom(publishDateFrom).PublishDateTo(publishDateTo).TextSearchField(textSearchField).TextSearchInput(textSearchInput).Cvssv2From(cvssv2From).Cvssv2To(cvssv2To).Cvssv3From(cvssv3From).Cvssv3To(cvssv3To).Cvssv4From(cvssv4From).Cvssv4To(cvssv4To).EpssFrom(epssFrom).EpssTo(epssTo).EpssPercentileFrom(epssPercentileFrom).EpssPercentileTo(epssPercentileTo).OccurrencesFrom(occurrencesFrom).OccurrencesTo(occurrencesTo).Execute()
 
 Returns a list of all findings grouped by vulnerability
 
@@ -229,7 +169,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -249,6 +189,8 @@ func main() {
 	cvssv2To := "cvssv2To_example" // string | Filter CVSSv2 to this value (optional)
 	cvssv3From := "cvssv3From_example" // string | Filter CVSSv3 from this value (optional)
 	cvssv3To := "cvssv3To_example" // string | Filter CVSSv3 to this value (optional)
+	cvssv4From := "cvssv4From_example" // string | Filter CVSSv4 from this value (optional)
+	cvssv4To := "cvssv4To_example" // string | Filter CVSSv4 to this value (optional)
 	epssFrom := "epssFrom_example" // string | Filter EPSS from this value (optional)
 	epssTo := "epssTo_example" // string | Filter EPSS to this value (optional)
 	epssPercentileFrom := "epssPercentileFrom_example" // string | Filter EPSS Percentile from this value (optional)
@@ -258,7 +200,7 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.FindingAPI.GetAllFindings(context.Background()).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ShowInactive(showInactive).Severity(severity).PublishDateFrom(publishDateFrom).PublishDateTo(publishDateTo).TextSearchField(textSearchField).TextSearchInput(textSearchInput).Cvssv2From(cvssv2From).Cvssv2To(cvssv2To).Cvssv3From(cvssv3From).Cvssv3To(cvssv3To).EpssFrom(epssFrom).EpssTo(epssTo).EpssPercentileFrom(epssPercentileFrom).EpssPercentileTo(epssPercentileTo).OccurrencesFrom(occurrencesFrom).OccurrencesTo(occurrencesTo).Execute()
+	resp, r, err := apiClient.FindingAPI.GetAllFindings(context.Background()).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ShowInactive(showInactive).Severity(severity).PublishDateFrom(publishDateFrom).PublishDateTo(publishDateTo).TextSearchField(textSearchField).TextSearchInput(textSearchInput).Cvssv2From(cvssv2From).Cvssv2To(cvssv2To).Cvssv3From(cvssv3From).Cvssv3To(cvssv3To).Cvssv4From(cvssv4From).Cvssv4To(cvssv4To).EpssFrom(epssFrom).EpssTo(epssTo).EpssPercentileFrom(epssPercentileFrom).EpssPercentileTo(epssPercentileTo).OccurrencesFrom(occurrencesFrom).OccurrencesTo(occurrencesTo).Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `FindingAPI.GetAllFindings``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
@@ -295,6 +237,8 @@ Name | Type | Description  | Notes
  **cvssv2To** | **string** | Filter CVSSv2 to this value | 
  **cvssv3From** | **string** | Filter CVSSv3 from this value | 
  **cvssv3To** | **string** | Filter CVSSv3 to this value | 
+ **cvssv4From** | **string** | Filter CVSSv4 from this value | 
+ **cvssv4To** | **string** | Filter CVSSv4 to this value | 
  **epssFrom** | **string** | Filter EPSS from this value | 
  **epssTo** | **string** | Filter EPSS to this value | 
  **epssPercentileFrom** | **string** | Filter EPSS Percentile from this value | 
@@ -322,7 +266,7 @@ Name | Type | Description  | Notes
 
 ## GetAllFindings1
 
-> []Finding GetAllFindings1(ctx).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ShowInactive(showInactive).ShowSuppressed(showSuppressed).Severity(severity).AnalysisStatus(analysisStatus).VendorResponse(vendorResponse).PublishDateFrom(publishDateFrom).PublishDateTo(publishDateTo).AttributedOnDateFrom(attributedOnDateFrom).AttributedOnDateTo(attributedOnDateTo).TextSearchField(textSearchField).TextSearchInput(textSearchInput).Cvssv2From(cvssv2From).Cvssv2To(cvssv2To).Cvssv3From(cvssv3From).Cvssv3To(cvssv3To).EpssFrom(epssFrom).EpssTo(epssTo).EpssPercentileFrom(epssPercentileFrom).EpssPercentileTo(epssPercentileTo).Execute()
+> []Finding GetAllFindings1(ctx).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ShowInactive(showInactive).ShowSuppressed(showSuppressed).Severity(severity).AnalysisStatus(analysisStatus).VendorResponse(vendorResponse).PublishDateFrom(publishDateFrom).PublishDateTo(publishDateTo).AttributedOnDateFrom(attributedOnDateFrom).AttributedOnDateTo(attributedOnDateTo).TextSearchField(textSearchField).TextSearchInput(textSearchInput).Cvssv2From(cvssv2From).Cvssv2To(cvssv2To).Cvssv3From(cvssv3From).Cvssv3To(cvssv3To).Cvssv4From(cvssv4From).Cvssv4To(cvssv4To).EpssFrom(epssFrom).EpssTo(epssTo).EpssPercentileFrom(epssPercentileFrom).EpssPercentileTo(epssPercentileTo).Execute()
 
 Returns a list of all findings
 
@@ -337,7 +281,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -362,6 +306,8 @@ func main() {
 	cvssv2To := "cvssv2To_example" // string | Filter CVSSv2 from this Value (optional)
 	cvssv3From := "cvssv3From_example" // string | Filter CVSSv3 from this value (optional)
 	cvssv3To := "cvssv3To_example" // string | Filter CVSSv3 from this Value (optional)
+	cvssv4From := "cvssv4From_example" // string | Filter CVSSv4 from this value (optional)
+	cvssv4To := "cvssv4To_example" // string | Filter CVSSv4 to this value (optional)
 	epssFrom := "epssFrom_example" // string | Filter EPSS from this value (optional)
 	epssTo := "epssTo_example" // string | Filter EPSS to this value (optional)
 	epssPercentileFrom := "epssPercentileFrom_example" // string | Filter EPSS Percentile from this value (optional)
@@ -369,7 +315,7 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.FindingAPI.GetAllFindings1(context.Background()).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ShowInactive(showInactive).ShowSuppressed(showSuppressed).Severity(severity).AnalysisStatus(analysisStatus).VendorResponse(vendorResponse).PublishDateFrom(publishDateFrom).PublishDateTo(publishDateTo).AttributedOnDateFrom(attributedOnDateFrom).AttributedOnDateTo(attributedOnDateTo).TextSearchField(textSearchField).TextSearchInput(textSearchInput).Cvssv2From(cvssv2From).Cvssv2To(cvssv2To).Cvssv3From(cvssv3From).Cvssv3To(cvssv3To).EpssFrom(epssFrom).EpssTo(epssTo).EpssPercentileFrom(epssPercentileFrom).EpssPercentileTo(epssPercentileTo).Execute()
+	resp, r, err := apiClient.FindingAPI.GetAllFindings1(context.Background()).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ShowInactive(showInactive).ShowSuppressed(showSuppressed).Severity(severity).AnalysisStatus(analysisStatus).VendorResponse(vendorResponse).PublishDateFrom(publishDateFrom).PublishDateTo(publishDateTo).AttributedOnDateFrom(attributedOnDateFrom).AttributedOnDateTo(attributedOnDateTo).TextSearchField(textSearchField).TextSearchInput(textSearchInput).Cvssv2From(cvssv2From).Cvssv2To(cvssv2To).Cvssv3From(cvssv3From).Cvssv3To(cvssv3To).Cvssv4From(cvssv4From).Cvssv4To(cvssv4To).EpssFrom(epssFrom).EpssTo(epssTo).EpssPercentileFrom(epssPercentileFrom).EpssPercentileTo(epssPercentileTo).Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `FindingAPI.GetAllFindings1``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
@@ -411,6 +357,8 @@ Name | Type | Description  | Notes
  **cvssv2To** | **string** | Filter CVSSv2 from this Value | 
  **cvssv3From** | **string** | Filter CVSSv3 from this value | 
  **cvssv3To** | **string** | Filter CVSSv3 from this Value | 
+ **cvssv4From** | **string** | Filter CVSSv4 from this value | 
+ **cvssv4To** | **string** | Filter CVSSv4 to this value | 
  **epssFrom** | **string** | Filter EPSS from this value | 
  **epssTo** | **string** | Filter EPSS to this value | 
  **epssPercentileFrom** | **string** | Filter EPSS Percentile from this value | 
@@ -436,7 +384,7 @@ Name | Type | Description  | Notes
 
 ## GetFindingsByProject
 
-> []Finding GetFindingsByProject(ctx, uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Suppressed(suppressed).Source(source).Accept(accept).HasAnalysis(hasAnalysis).Execute()
+> []Finding GetFindingsByProject(ctx, uuid).SearchText(searchText).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Suppressed(suppressed).Source(source).Accept(accept).HasAnalysis(hasAnalysis).EpssFrom(epssFrom).EpssTo(epssTo).Execute()
 
 Returns a list of all findings for a specific project or generates SARIF file if Accept: application/sarif+json header is provided
 
@@ -451,11 +399,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
 	uuid := "38400000-8cf0-11bd-b23e-10b96e4ef00d" // string | The UUID of the project
+	searchText := "searchText_example" // string | Case-insensitive substring filter matched against component name, component group, and vulnerability ID. Additionally matched as an exact value against component UUID, vulnerability UUID, and the `componentUuid:vulnerabilityUuid` pair. (optional)
 	pageNumber := "pageNumber_example" // string | The page to return. To be used in conjunction with <code>pageSize</code>. (optional) (default to "1")
 	pageSize := "pageSize_example" // string | Number of elements to return per page. To be used in conjunction with <code>pageNumber</code>. (optional) (default to "100")
 	offset := "offset_example" // string | Offset to start returning elements from. To be used in conjunction with <code>limit</code>. (optional)
@@ -466,10 +415,12 @@ func main() {
 	source := "source_example" // string | Optionally limit findings to specific sources of vulnerability intelligence (optional)
 	accept := "accept_example" // string |  (optional)
 	hasAnalysis := true // bool | Whether to include only projects with existing analysis. (optional)
+	epssFrom := float32(8.14) // float32 | Filter EPSS score from this value (inclusive) (optional)
+	epssTo := float32(8.14) // float32 | Filter EPSS score to this value (inclusive) (optional)
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.FindingAPI.GetFindingsByProject(context.Background(), uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Suppressed(suppressed).Source(source).Accept(accept).HasAnalysis(hasAnalysis).Execute()
+	resp, r, err := apiClient.FindingAPI.GetFindingsByProject(context.Background(), uuid).SearchText(searchText).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Suppressed(suppressed).Source(source).Accept(accept).HasAnalysis(hasAnalysis).EpssFrom(epssFrom).EpssTo(epssTo).Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `FindingAPI.GetFindingsByProject``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
@@ -495,6 +446,7 @@ Other parameters are passed through a pointer to a apiGetFindingsByProjectReques
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
+ **searchText** | **string** | Case-insensitive substring filter matched against component name, component group, and vulnerability ID. Additionally matched as an exact value against component UUID, vulnerability UUID, and the &#x60;componentUuid:vulnerabilityUuid&#x60; pair. | 
  **pageNumber** | **string** | The page to return. To be used in conjunction with &lt;code&gt;pageSize&lt;/code&gt;. | [default to &quot;1&quot;]
  **pageSize** | **string** | Number of elements to return per page. To be used in conjunction with &lt;code&gt;pageNumber&lt;/code&gt;. | [default to &quot;100&quot;]
  **offset** | **string** | Offset to start returning elements from. To be used in conjunction with &lt;code&gt;limit&lt;/code&gt;. | 
@@ -505,6 +457,8 @@ Name | Type | Description  | Notes
  **source** | **string** | Optionally limit findings to specific sources of vulnerability intelligence | 
  **accept** | **string** |  | 
  **hasAnalysis** | **bool** | Whether to include only projects with existing analysis. | 
+ **epssFrom** | **float32** | Filter EPSS score from this value (inclusive) | 
+ **epssTo** | **float32** | Filter EPSS score to this value (inclusive) | 
 
 ### Return type
 

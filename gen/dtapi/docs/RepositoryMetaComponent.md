@@ -6,6 +6,7 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **LastCheck** | Pointer to **int64** | UNIX epoch timestamp in milliseconds | [optional] 
 **LatestVersion** | Pointer to **string** |  | [optional] 
+**LatestVersionPublishedAt** | Pointer to **int64** | UNIX epoch timestamp in milliseconds | [optional] 
 **Name** | Pointer to **string** |  | [optional] 
 **Namespace** | Pointer to **string** |  | [optional] 
 **RepositoryType** | Pointer to **string** |  | [optional] 
@@ -78,6 +79,31 @@ SetLatestVersion sets LatestVersion field to given value.
 `func (o *RepositoryMetaComponent) HasLatestVersion() bool`
 
 HasLatestVersion returns a boolean if a field has been set.
+
+### GetLatestVersionPublishedAt
+
+`func (o *RepositoryMetaComponent) GetLatestVersionPublishedAt() int64`
+
+GetLatestVersionPublishedAt returns the LatestVersionPublishedAt field if non-nil, zero value otherwise.
+
+### GetLatestVersionPublishedAtOk
+
+`func (o *RepositoryMetaComponent) GetLatestVersionPublishedAtOk() (*int64, bool)`
+
+GetLatestVersionPublishedAtOk returns a tuple with the LatestVersionPublishedAt field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetLatestVersionPublishedAt
+
+`func (o *RepositoryMetaComponent) SetLatestVersionPublishedAt(v int64)`
+
+SetLatestVersionPublishedAt sets LatestVersionPublishedAt field to given value.
+
+### HasLatestVersionPublishedAt
+
+`func (o *RepositoryMetaComponent) HasLatestVersionPublishedAt() bool`
+
+HasLatestVersionPublishedAt returns a boolean if a field has been set.
 
 ### GetName
 

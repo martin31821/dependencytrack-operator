@@ -100,7 +100,7 @@ func (r *APIKeyReconciler) teamUUID(ctx context.Context, apiKey *dependencytrack
 	}
 
 	// Block until the Team has been successfully reconciled.
-	if !meta.IsStatusConditionTrue(team.Status.Conditions, conditionReconciled) {
+	if !meta.IsStatusConditionTrue(team.Status.Conditions, conditionReady) {
 		log.Info("referenced Team not yet reconciled, requeueing", "team", apiKey.Spec.TeamRef)
 		setAPIKeyCondition(apiKey, metav1.ConditionFalse, "TeamNotReady",
 			"referenced Team "+apiKey.Spec.TeamRef+" has not been successfully reconciled yet")
@@ -271,7 +271,7 @@ func (r *APIKeyReconciler) failAPIKeyStatus(ctx context.Context, apiKey *depende
 
 func setAPIKeyCondition(apiKey *dependencytrackv1alpha1.APIKey, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&apiKey.Status.Conditions, metav1.Condition{
-		Type:               conditionReconciled,
+		Type:               conditionReady,
 		Status:             status,
 		Reason:             reason,
 		Message:            message,

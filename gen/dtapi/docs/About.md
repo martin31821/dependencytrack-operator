@@ -6,8 +6,6 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Application** | Pointer to **string** |  | [optional] 
 **Framework** | Pointer to [**Framework**](Framework.md) |  | [optional] 
-**ProviderData** | Pointer to **map[string]map[string]interface{}** |  | [optional] 
-**SystemUuid** | Pointer to **string** |  | [optional] 
 **Timestamp** | Pointer to **string** |  | [optional] 
 **Uuid** | Pointer to **string** |  | [optional] 
 **Version** | Pointer to **string** |  | [optional] 
@@ -80,56 +78,6 @@ SetFramework sets Framework field to given value.
 `func (o *About) HasFramework() bool`
 
 HasFramework returns a boolean if a field has been set.
-
-### GetProviderData
-
-`func (o *About) GetProviderData() map[string]map[string]interface{}`
-
-GetProviderData returns the ProviderData field if non-nil, zero value otherwise.
-
-### GetProviderDataOk
-
-`func (o *About) GetProviderDataOk() (*map[string]map[string]interface{}, bool)`
-
-GetProviderDataOk returns a tuple with the ProviderData field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetProviderData
-
-`func (o *About) SetProviderData(v map[string]map[string]interface{})`
-
-SetProviderData sets ProviderData field to given value.
-
-### HasProviderData
-
-`func (o *About) HasProviderData() bool`
-
-HasProviderData returns a boolean if a field has been set.
-
-### GetSystemUuid
-
-`func (o *About) GetSystemUuid() string`
-
-GetSystemUuid returns the SystemUuid field if non-nil, zero value otherwise.
-
-### GetSystemUuidOk
-
-`func (o *About) GetSystemUuidOk() (*string, bool)`
-
-GetSystemUuidOk returns a tuple with the SystemUuid field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetSystemUuid
-
-`func (o *About) SetSystemUuid(v string)`
-
-SetSystemUuid sets SystemUuid field to given value.
-
-### HasSystemUuid
-
-`func (o *About) HasSystemUuid() bool`
-
-HasSystemUuid returns a boolean if a field has been set.
 
 ### GetTimestamp
 

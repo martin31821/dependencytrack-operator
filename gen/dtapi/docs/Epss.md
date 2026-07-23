@@ -4,7 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**Cve** | **string** |  | 
+**Cve** | Pointer to **string** |  | [optional] 
 **Percentile** | Pointer to **float32** |  | [optional] 
 **Score** | Pointer to **float32** |  | [optional] 
 
@@ -12,7 +12,7 @@ Name | Type | Description | Notes
 
 ### NewEpss
 
-`func NewEpss(cve string, ) *Epss`
+`func NewEpss() *Epss`
 
 NewEpss instantiates a new Epss object
 This constructor will assign default values to properties that have it defined,
@@ -46,6 +46,11 @@ and a boolean to check if the value has been set.
 
 SetCve sets Cve field to given value.
 
+### HasCve
+
+`func (o *Epss) HasCve() bool`
+
+HasCve returns a boolean if a field has been set.
 
 ### GetPercentile
 

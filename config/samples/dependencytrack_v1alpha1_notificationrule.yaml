@@ -1,0 +1,17 @@
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: NotificationRule
+metadata:
+  labels:
+    app.kubernetes.io/name: deptrack-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: notificationrule-sample
+spec:
+  name: Critical Vulnerability Notification
+  scope: PORTFOLIO
+  triggerType: EVENT
+  level: ERROR
+  publisherRef:
+    name: notificationpublisher-sample
+  notifyOn:
+    - NEW_VULNERABILITY
+    - VULNERABILITY_SCAN_COMPLETED

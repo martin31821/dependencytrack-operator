@@ -3,4 +3,6 @@ resources:
 - dependencytrack_v1alpha1_team.yaml
 - dependencytrack_v1alpha1_apikey.yaml
 - dependencytrack_v1alpha1_policy.yaml
+- dependencytrack_v1alpha1_notificationpublisher.yaml
+- dependencytrack_v1alpha1_notificationrule.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

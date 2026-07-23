@@ -51,7 +51,7 @@ type APIKeyStatus struct {
 // +kubebuilder:printcolumn:name="Team",type=string,JSONPath=`.spec.teamRef`
 // +kubebuilder:printcolumn:name="Secret",type=string,JSONPath=`.spec.secretName`
 // +kubebuilder:printcolumn:name="PublicID",type=string,JSONPath=`.status.publicId`
-// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Reconciled")].status`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 
 // APIKey is the Schema for the apikeys API.
 type APIKey struct {

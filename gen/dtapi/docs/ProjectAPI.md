@@ -1,6 +1,6 @@
 # \ProjectAPI
 
-All URIs are relative to *https://hyades-api.iris-flair-alpha.vlair-staging.defra01.iris-sensing.net/api*
+All URIs are relative to */api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
@@ -42,7 +42,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -108,7 +108,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -174,7 +174,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -242,7 +242,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -291,7 +291,7 @@ Name | Type | Description  | Notes
 
 ## GetChildrenProjects
 
-> []Project GetChildrenProjects(ctx, uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).Execute()
+> []ListProjectsResponseItem GetChildrenProjects(ctx, uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).Execute()
 
 Returns a list of all children for a project
 
@@ -306,7 +306,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -326,7 +326,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error when calling `ProjectAPI.GetChildrenProjects``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `GetChildrenProjects`: []Project
+	// response from `GetChildrenProjects`: []ListProjectsResponseItem
 	fmt.Fprintf(os.Stdout, "Response from `ProjectAPI.GetChildrenProjects`: %v\n", resp)
 }
 ```
@@ -357,7 +357,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-[**[]Project**](Project.md)
+[**[]ListProjectsResponseItem**](ListProjectsResponseItem.md)
 
 ### Authorization
 
@@ -375,7 +375,7 @@ Name | Type | Description  | Notes
 
 ## GetChildrenProjectsByClassifier
 
-> []Project GetChildrenProjectsByClassifier(ctx, classifier, uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).Execute()
+> []ListProjectsResponseItem GetChildrenProjectsByClassifier(ctx, classifier, uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).Execute()
 
 Returns a list of all children for a project by classifier
 
@@ -390,7 +390,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -411,7 +411,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error when calling `ProjectAPI.GetChildrenProjectsByClassifier``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `GetChildrenProjectsByClassifier`: []Project
+	// response from `GetChildrenProjectsByClassifier`: []ListProjectsResponseItem
 	fmt.Fprintf(os.Stdout, "Response from `ProjectAPI.GetChildrenProjectsByClassifier`: %v\n", resp)
 }
 ```
@@ -444,7 +444,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-[**[]Project**](Project.md)
+[**[]ListProjectsResponseItem**](ListProjectsResponseItem.md)
 
 ### Authorization
 
@@ -462,7 +462,7 @@ Name | Type | Description  | Notes
 
 ## GetChildrenProjectsByTag
 
-> []Project GetChildrenProjectsByTag(ctx, tag, uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).Execute()
+> []ListProjectsResponseItem GetChildrenProjectsByTag(ctx, tag, uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).Execute()
 
 Returns a list of all children for a project by tag
 
@@ -477,7 +477,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -498,7 +498,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error when calling `ProjectAPI.GetChildrenProjectsByTag``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `GetChildrenProjectsByTag`: []Project
+	// response from `GetChildrenProjectsByTag`: []ListProjectsResponseItem
 	fmt.Fprintf(os.Stdout, "Response from `ProjectAPI.GetChildrenProjectsByTag`: %v\n", resp)
 }
 ```
@@ -531,7 +531,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-[**[]Project**](Project.md)
+[**[]ListProjectsResponseItem**](ListProjectsResponseItem.md)
 
 ### Authorization
 
@@ -564,7 +564,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -634,7 +634,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -704,7 +704,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -772,7 +772,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -853,7 +853,7 @@ Name | Type | Description  | Notes
 
 ## GetProjects
 
-> []Project GetProjects(ctx).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Name(name).ExcludeInactive(excludeInactive).OnlyRoot(onlyRoot).NotAssignedToTeamWithUuid(notAssignedToTeamWithUuid).Execute()
+> []ListProjectsResponseItem GetProjects(ctx).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Name(name).ExcludeInactive(excludeInactive).OnlyRoot(onlyRoot).NotAssignedToTeamWithUuid(notAssignedToTeamWithUuid).Execute()
 
 Returns a list of all projects
 
@@ -868,7 +868,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -890,7 +890,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error when calling `ProjectAPI.GetProjects``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `GetProjects`: []Project
+	// response from `GetProjects`: []ListProjectsResponseItem
 	fmt.Fprintf(os.Stdout, "Response from `ProjectAPI.GetProjects`: %v\n", resp)
 }
 ```
@@ -919,7 +919,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-[**[]Project**](Project.md)
+[**[]ListProjectsResponseItem**](ListProjectsResponseItem.md)
 
 ### Authorization
 
@@ -937,7 +937,7 @@ Name | Type | Description  | Notes
 
 ## GetProjectsByClassifier
 
-> []Project GetProjectsByClassifier(ctx, classifier).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).OnlyRoot(onlyRoot).Execute()
+> []ListProjectsResponseItem GetProjectsByClassifier(ctx, classifier).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).OnlyRoot(onlyRoot).Execute()
 
 Returns a list of all projects by classifier
 
@@ -952,7 +952,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -973,7 +973,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error when calling `ProjectAPI.GetProjectsByClassifier``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `GetProjectsByClassifier`: []Project
+	// response from `GetProjectsByClassifier`: []ListProjectsResponseItem
 	fmt.Fprintf(os.Stdout, "Response from `ProjectAPI.GetProjectsByClassifier`: %v\n", resp)
 }
 ```
@@ -1005,7 +1005,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-[**[]Project**](Project.md)
+[**[]ListProjectsResponseItem**](ListProjectsResponseItem.md)
 
 ### Authorization
 
@@ -1023,7 +1023,7 @@ Name | Type | Description  | Notes
 
 ## GetProjectsByTag
 
-> []Project GetProjectsByTag(ctx, tag).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).OnlyRoot(onlyRoot).Execute()
+> []ListProjectsResponseItem GetProjectsByTag(ctx, tag).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).OnlyRoot(onlyRoot).Execute()
 
 Returns a list of all projects by tag
 
@@ -1038,7 +1038,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -1059,7 +1059,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error when calling `ProjectAPI.GetProjectsByTag``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `GetProjectsByTag`: []Project
+	// response from `GetProjectsByTag`: []ListProjectsResponseItem
 	fmt.Fprintf(os.Stdout, "Response from `ProjectAPI.GetProjectsByTag`: %v\n", resp)
 }
 ```
@@ -1091,7 +1091,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-[**[]Project**](Project.md)
+[**[]ListProjectsResponseItem**](ListProjectsResponseItem.md)
 
 ### Authorization
 
@@ -1124,7 +1124,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -1201,7 +1201,7 @@ Name | Type | Description  | Notes
 
 ## GetProjectsWithoutDescendantsOf
 
-> []Project GetProjectsWithoutDescendantsOf(ctx, uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Name(name).ExcludeInactive(excludeInactive).Execute()
+> []ListProjectsResponseItem GetProjectsWithoutDescendantsOf(ctx, uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Name(name).ExcludeInactive(excludeInactive).Execute()
 
 Returns a list of all projects without the descendants of the selected project
 
@@ -1216,7 +1216,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -1237,7 +1237,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error when calling `ProjectAPI.GetProjectsWithoutDescendantsOf``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `GetProjectsWithoutDescendantsOf`: []Project
+	// response from `GetProjectsWithoutDescendantsOf`: []ListProjectsResponseItem
 	fmt.Fprintf(os.Stdout, "Response from `ProjectAPI.GetProjectsWithoutDescendantsOf`: %v\n", resp)
 }
 ```
@@ -1269,7 +1269,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-[**[]Project**](Project.md)
+[**[]ListProjectsResponseItem**](ListProjectsResponseItem.md)
 
 ### Authorization
 
@@ -1302,7 +1302,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -1374,7 +1374,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {

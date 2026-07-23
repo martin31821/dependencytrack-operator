@@ -14,7 +14,7 @@ bootstrapping and provisioning of a fresh installation.
 `dependencytrack-operator` closes this gap by providing a **Kubernetes-native,
 declarative approach** to:
 
-- Automate initial setup (credential rotation, API keys, OIDC, Teams, ...)
+- Automate initial setup (credential rotation, API keys, OIDC, Teams, notification publishers, notification rules, policies, ...)
 - Integrate seamlessly with GitOps workflows (ArgoCD, Flux, etc.)
 
 Note, that we currently see this as an intermediate solution until the gap is
@@ -22,7 +22,7 @@ closed in upstream DependencyTrack.
 
 ## Custom Resources
 
-The operator provides three CRDs in the `dependencytrack.mko.dev/v1alpha1` API group.
+The operator provides five CRDs in the `dependencytrack.mko.dev/v1alpha1` API group.
 
 ### Team
 
@@ -116,6 +116,112 @@ spec:
 The operator creates the policy first and then persists each inline condition through DependencyTrack's condition API. It records the remote UUID in `status.uuid`, uses that UUID for subsequent updates and deletion, and reports failures through the `Ready` status condition.
 
 > **Dependency-Track v5.0.2 compatibility:** condition subjects use Dependency-Track's native names. `CVSS` and suppression conditions are not supported; use a supported subject such as `SEVERITY`, `LICENSE`, `PACKAGE_URL`, or `VULNERABILITY_ID`.
+
+### NotificationPublisher
+
+Creates and manages a **notification publisher** in DependencyTrack — a configurable endpoint (Slack, email, webhook, etc.) that receives notification events.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `spec.name` | string | Yes | Display name for the publisher in DependencyTrack |
+| `spec.extensionName` | string | Yes | Publisher extension identifier (e.g. `slack`, `email`, `webhook`, `opsgenie`) |
+| `spec.description` | string | No | Human-readable description (max 1024 chars) |
+| `status.uuid` | string | — | DependencyTrack UUID assigned to the publisher |
+| `status.name` | string | — | Name last synced to DependencyTrack |
+| `status.conditions` | []Condition | — | Reconciliation state |
+
+**Example:**
+
+```yaml
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: NotificationPublisher
+metadata:
+  name: slack-publisher
+  namespace: default
+spec:
+  name: Slack Notifications
+  extensionName: slack
+  description: "Publishes critical vulnerability events to #security-alerts"
+```
+
+The publisher must exist and be `Ready` before any `NotificationRule` can reference it.
+
+### NotificationRule
+
+Creates and manages a **notification rule** in DependencyTrack — a policy that routes notification events to a configured publisher.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `spec.name` | string | Yes | Display name for the rule (max 255 chars) |
+| `spec.scope` | string | Yes | Applies to: `SYSTEM` or `PORTFOLIO` |
+| `spec.triggerType` | string | Yes | Fires on: `EVENT` or `SCHEDULE` |
+| `spec.level` | string | Yes | Filter by severity: `INFORMATIONAL`, `WARNING`, or `ERROR` |
+| `spec.publisherRef.name` | string | Yes | Name of the `NotificationPublisher` CR in the same namespace |
+| `spec.enabled` | bool | No | Whether the rule is active (default: `true`) |
+| `spec.notifyOn` | []string | No | Event types that trigger the rule (e.g. `NEW_VULNERABILITY`, `VULNERABILITY_SCAN_COMPLETED`) |
+| `spec.filterExpression` | string | No | QL filter string for the rule (max 1024 chars) |
+| `spec.message` | string | No | Custom notification message template (max 4096 chars) |
+| `spec.publisherConfigSecretRef` | object | No | Secret containing publisher-specific config JSON (see below) |
+| `spec.logSuccessfulPublish` | bool | No | Log successful publishes; defaults to false |
+| `spec.notifyChildren` | bool | No | Apply to child projects (only for PORTFOLIO/SYSTEM scope) |
+| `spec.scheduleCron` | string | No | Cron expression for scheduled rules; required when `triggerType: SCHEDULE` |
+| `spec.scheduleSkipUnchanged` | bool | No | Skip emitting notifications if result is unchanged (schedule only) |
+| `spec.teams` | []string | No | Team CR names whose remote UUID is associated with this rule |
+| `spec.projects` | []string | No | Project UUIDs to associate with this rule (ignored for PORTFOLIO/SYSTEM scope) |
+| `status.uuid` | string | — | DependencyTrack UUID assigned to the rule |
+| `status.name` | string | — | Name last synced to DependencyTrack |
+| `status.conditions` | []Condition | — | Reconciliation state |
+
+**Example:**
+
+```yaml
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: NotificationRule
+metadata:
+  name: critical-vuln-rule
+  namespace: default
+spec:
+  name: Critical Vulnerability Alert
+  scope: PORTFOLIO
+  triggerType: EVENT
+  level: ERROR
+  publisherRef:
+    name: slack-publisher
+  notifyOn:
+    - NEW_VULNERABILITY
+    - VULNERABILITY_SCAN_COMPLETED
+```
+
+**Publisher config:** Some extensions (like Slack) require configuration (webhook URL, channel, etc.). Store this JSON in a Kubernetes `Secret` and reference it:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: slack-config
+  namespace: default
+type: Opaque
+stringData:
+  config.json: '{"webhookUrl": "https://hooks.slack.com/services/T00000/B00000/XXXX", "channel": "#alerts"}'
+---
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: NotificationRule
+metadata:
+  name: slack-alert-rule
+  namespace: default
+spec:
+  name: Slack Critical Alert
+  scope: PORTFOLIO
+  triggerType: EVENT
+  level: ERROR
+  publisherRef:
+    name: slack-publisher
+  publisherConfigSecretRef:
+    name: slack-config
+    key: config.json
+```
+
+The operator validates the JSON config against the publisher extension schema and reports failures via the `Ready` status condition.
 
 ## Getting Started
 

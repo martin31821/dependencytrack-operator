@@ -70,12 +70,21 @@ var _ = Describe("Manager", Ordered, func() {
 		dtURL := utils.DependencyTrackHost()
 		_, _ = fmt.Fprintf(GinkgoWriter, "DependencyTrack URL: %s\n", dtURL)
 
-		By("installing the packaged operator Helm chart")
-		err = utils.InstallOperatorHelm(projectDir, projectImage, dtURL, namespace)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install the operator Helm chart")
+		// When the cluster is preserved between runs (E2E_SKIP_CLUSTER_TEARDOWN),
+		// skip the fresh install and instead upgrade the existing operator release.
+		// The image has already been built and loaded in BeforeSuite.
+		if os.Getenv("E2E_SKIP_CLUSTER_TEARDOWN") == "true" && utils.IsOperatorDeployed(namespace) {
+			By("upgrading the operator Helm release with the new image")
+			err = utils.UpgradeOperatorHelm(projectDir, projectImage, dtURL, namespace)
+			Expect(err).NotTo(HaveOccurred(), "Failed to upgrade the operator Helm chart")
+		} else {
+			By("installing the packaged operator Helm chart")
+			err = utils.InstallOperatorHelm(projectDir, projectImage, dtURL, namespace)
+			Expect(err).NotTo(HaveOccurred(), "Failed to install the operator Helm chart")
+		}
 
 		By("exercising the packaged operator Helm upgrade path")
-		err = utils.UpgradeOperatorHelm(projectDir, namespace)
+		err = utils.UpgradeOperatorHelm(projectDir, projectImage, dtURL, namespace)
 		Expect(err).NotTo(HaveOccurred(), "Failed to upgrade the operator Helm chart")
 
 		By("waiting for the manager to report 'starting manager' in logs")
@@ -257,6 +266,10 @@ subjects:
 			}
 			Eventually(verifyMetricsServerStarted).Should(Succeed())
 
+			By("ensuring any existing curl-metrics pod is removed")
+			cleanupCmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace, "--ignore-not-found=true")
+			_, _ = utils.Run(cleanupCmd)
+
 			By("creating the curl-metrics pod to access the metrics endpoint")
 			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
 				"--namespace", namespace,
@@ -352,16 +365,16 @@ subjects:
 				}
 			}
 
-			// verifyTeamHasStatus checks that the Team CR has a Reconciled condition set.
+			// verifyTeamHasStatus checks that the Team CR has a Ready condition set.
 			verifyTeamHasStatus := func(teamName string) {
-				By("verifying Team has a Reconciled condition with status True (real DependencyTrack)")
+				By("verifying Team has a Ready condition with status True (real DependencyTrack)")
 				verifyCondition := func(g Gomega) {
 					cmd := exec.Command("kubectl", "get", "team", teamName, "-n", namespace,
-						"-o", "jsonpath={.status.conditions[?(@.type=='Reconciled')].status}")
+						"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(output).To(Equal("True"),
-						"Team should have Reconciled=True when talking to a real DependencyTrack")
+						"Team should have Ready=True when talking to a real DependencyTrack")
 				}
 				Eventually(verifyCondition, 5*time.Minute).Should(Succeed())
 			}

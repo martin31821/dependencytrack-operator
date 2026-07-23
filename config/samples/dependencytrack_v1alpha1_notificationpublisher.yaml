@@ -1,0 +1,11 @@
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: NotificationPublisher
+metadata:
+  labels:
+    app.kubernetes.io/name: deptrack-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: notificationpublisher-sample
+spec:
+  name: Slack Publisher
+  extensionName: slack
+  description: "Publishes notification events to Slack via webhook"

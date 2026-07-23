@@ -10,7 +10,7 @@ Name | Type | Description | Notes
 **Group** | Pointer to **string** | Group or namespace of the project | [optional] 
 **HasChildren** | **bool** | Whether the project has children | 
 **IsLatest** | Pointer to **bool** | Whether the project version is latest | [optional] 
-**LastBomImport** | Pointer to **float32** | Timestamp of the last BOM import | [optional] 
+**LastBomImport** | Pointer to **int64** | Timestamp of the last BOM import | [optional] 
 **LastBomImportFormat** | Pointer to **string** | Format of the last imported BOM | [optional] 
 **LastRiskScore** | Pointer to **float64** | Last observed risk score | [optional] 
 **Metrics** | Pointer to [**ConciseProjectMetrics**](ConciseProjectMetrics.md) |  | [optional] 
@@ -181,20 +181,20 @@ HasIsLatest returns a boolean if a field has been set.
 
 ### GetLastBomImport
 
-`func (o *ConciseProject) GetLastBomImport() float32`
+`func (o *ConciseProject) GetLastBomImport() int64`
 
 GetLastBomImport returns the LastBomImport field if non-nil, zero value otherwise.
 
 ### GetLastBomImportOk
 
-`func (o *ConciseProject) GetLastBomImportOk() (*float32, bool)`
+`func (o *ConciseProject) GetLastBomImportOk() (*int64, bool)`
 
 GetLastBomImportOk returns a tuple with the LastBomImport field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetLastBomImport
 
-`func (o *ConciseProject) SetLastBomImport(v float32)`
+`func (o *ConciseProject) SetLastBomImport(v int64)`
 
 SetLastBomImport sets LastBomImport field to given value.
 

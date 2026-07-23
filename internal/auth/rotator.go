@@ -44,9 +44,14 @@ const (
 
 // PasswordRotationRunnable checks and rotates the DependencyTrack admin
 // password stored in a Kubernetes Secret. It runs once per leader election.
+// When ClientProvider is set, the runnable invalidates its auth cache after
+// rotation so controllers immediately pick up the new credentials.
 type PasswordRotationRunnable struct {
 	Client    client.Client
 	Namespace string
+	// ClientProvider, if set, is invalidated after rotation so controllers
+	// re-authenticate with the new password on their next reconciliation.
+	ClientProvider deptrack.ClientProviderInterface
 }
 
 func (r *PasswordRotationRunnable) NeedLeaderElection() bool { return true }
@@ -72,10 +77,18 @@ func (r *PasswordRotationRunnable) Start(ctx context.Context) error {
 			log.Error(err, "failed to create credentials secret")
 			return nil
 		}
-		// Re-read after creation so the rest of the flow sees the new secret.
-		if err := r.Client.Get(ctx, types.NamespacedName{Namespace: r.Namespace, Name: secretName}, secret); err != nil {
-			log.Error(err, "failed to read credentials secret after creation", "secret", secretName)
-			return nil
+		// We just created the secret, so populate it directly instead of
+		// re-reading (the cache informer is not yet running at this point in
+		// manager startup).
+		secret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: r.Namespace,
+			},
+			Data: map[string][]byte{
+				secretKeyUsername: []byte("admin"),
+				secretKeyPassword: []byte("admin"),
+			},
 		}
 	}
 
@@ -94,7 +107,11 @@ func (r *PasswordRotationRunnable) Start(ctx context.Context) error {
 			Password(pendingPassword).
 			Execute(); err == nil {
 			log.Info("DependencyTrack already accepted the new password, finalizing secret")
-			return r.finalizeSecret(ctx, secret, pendingPassword)
+			if err := r.finalizeSecret(ctx, secret, pendingPassword); err != nil {
+				return err
+			}
+			r.invalidateProvider()
+			return nil
 		}
 		log.Info("new password not yet applied to DependencyTrack, retrying rotation")
 		// Fall through and rotate again using the original password.
@@ -135,7 +152,11 @@ func (r *PasswordRotationRunnable) Start(ctx context.Context) error {
 	}
 
 	// Step C: promote the new password to the main key and remove the temp key.
-	return r.finalizeSecret(ctx, secret, newPassword)
+	if err := r.finalizeSecret(ctx, secret, newPassword); err != nil {
+		return err
+	}
+	r.invalidateProvider()
+	return nil
 }
 
 func (r *PasswordRotationRunnable) finalizeSecret(ctx context.Context, secret *corev1.Secret, newPassword string) error {
@@ -151,6 +172,14 @@ func (r *PasswordRotationRunnable) finalizeSecret(ctx context.Context, secret *c
 
 	log.Info("password rotation completed successfully")
 	return nil
+}
+
+// invalidateProvider clears the cached auth token so controllers re-authenticate
+// with the newly rotated password on their next reconciliation.
+func (r *PasswordRotationRunnable) invalidateProvider() {
+	if r.ClientProvider != nil {
+		r.ClientProvider.Invalidate()
+	}
 }
 
 // generatePassword returns a cryptographically random URL-safe string

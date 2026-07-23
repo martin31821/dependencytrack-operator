@@ -1,6 +1,6 @@
 # \AclAPI
 
-All URIs are relative to *https://hyades-api.iris-flair-alpha.vlair-staging.defra01.iris-sensing.net/api*
+All URIs are relative to */api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
@@ -27,7 +27,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -93,7 +93,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -149,7 +149,7 @@ Name | Type | Description  | Notes
 
 ## RetrieveProjects
 
-> []Project RetrieveProjects(ctx, uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).OnlyRoot(onlyRoot).Execute()
+> []ListProjectsResponseItem RetrieveProjects(ctx, uuid).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).ExcludeInactive(excludeInactive).OnlyRoot(onlyRoot).Execute()
 
 Returns the projects assigned to the specified team
 
@@ -164,7 +164,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -185,7 +185,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error when calling `AclAPI.RetrieveProjects``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `RetrieveProjects`: []Project
+	// response from `RetrieveProjects`: []ListProjectsResponseItem
 	fmt.Fprintf(os.Stdout, "Response from `AclAPI.RetrieveProjects`: %v\n", resp)
 }
 ```
@@ -217,7 +217,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-[**[]Project**](Project.md)
+[**[]ListProjectsResponseItem**](ListProjectsResponseItem.md)
 
 ### Authorization
 

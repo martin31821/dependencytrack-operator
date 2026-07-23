@@ -236,8 +236,9 @@ func main() {
 	}
 
 	if err := mgr.Add(&auth.PasswordRotationRunnable{
-		Client:    mgr.GetClient(),
-		Namespace: namespace,
+		Client:         mgr.GetClient(),
+		Namespace:      namespace,
+		ClientProvider: dtProvider,
 	}); err != nil {
 		setupLog.Error(err, "unable to add password rotation runnable")
 		os.Exit(1)
@@ -258,6 +259,25 @@ func main() {
 		DTProvider: dtProvider,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Policy")
+		os.Exit(1)
+	}
+	if err := (&controller.NotificationPublisherReconciler{
+		Client:     mgr.GetClient(),
+		Scheme:     mgr.GetScheme(),
+		Recorder:   mgr.GetEventRecorderFor("notificationpublisher-controller"),
+		DTProvider: dtProvider,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NotificationPublisher")
+		os.Exit(1)
+	}
+	if err := (&controller.NotificationRuleReconciler{
+		Client:                   mgr.GetClient(),
+		Scheme:                   mgr.GetScheme(),
+		Recorder:                 mgr.GetEventRecorderFor("notificationrule-controller"),
+		DTProvider:               dtProvider,
+		PublisherConfigValidator: controller.NewPublisherConfigValidator(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NotificationRule")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

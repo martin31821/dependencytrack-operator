@@ -1,6 +1,6 @@
 # \ComponentAPI
 
-All URIs are relative to *https://hyades-api.iris-flair-alpha.vlair-staging.defra01.iris-sensing.net/api*
+All URIs are relative to */api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
@@ -34,7 +34,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -106,7 +106,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -174,7 +174,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -260,7 +260,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -327,7 +327,7 @@ Name | Type | Description  | Notes
 
 ## GetComponentByIdentity
 
-> []Component GetComponentByIdentity(ctx).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Group(group).Name(name).Version(version).Purl(purl).Cpe(cpe).SwidTagId(swidTagId).Project(project).Execute()
+> []Component GetComponentByIdentity(ctx).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Group(group).Name(name).Version(version).Purl(purl).Cpe(cpe).SwidTagId(swidTagId).Project(project).ExcludeInactiveProjects(excludeInactiveProjects).OnlyLatestProjectVersions(onlyLatestProjectVersions).Execute()
 
 Returns a list of components that have the specified component identity. This resource accepts coordinates (group, name, version) or purl, cpe, or swidTagId
 
@@ -342,7 +342,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -359,10 +359,12 @@ func main() {
 	cpe := "cpe_example" // string | The cpe of the component (optional)
 	swidTagId := "swidTagId_example" // string | The swidTagId of the component (optional)
 	project := "38400000-8cf0-11bd-b23e-10b96e4ef00d" // string | The project the component belongs to (optional)
+	excludeInactiveProjects := true // bool | When true, only return components from active projects (optional)
+	onlyLatestProjectVersions := true // bool | When true, only return components from projects flagged as the latest version (optional)
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.ComponentAPI.GetComponentByIdentity(context.Background()).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Group(group).Name(name).Version(version).Purl(purl).Cpe(cpe).SwidTagId(swidTagId).Project(project).Execute()
+	resp, r, err := apiClient.ComponentAPI.GetComponentByIdentity(context.Background()).PageNumber(pageNumber).PageSize(pageSize).Offset(offset).Limit(limit).SortName(sortName).SortOrder(sortOrder).Group(group).Name(name).Version(version).Purl(purl).Cpe(cpe).SwidTagId(swidTagId).Project(project).ExcludeInactiveProjects(excludeInactiveProjects).OnlyLatestProjectVersions(onlyLatestProjectVersions).Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `ComponentAPI.GetComponentByIdentity``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
@@ -396,6 +398,8 @@ Name | Type | Description  | Notes
  **cpe** | **string** | The cpe of the component | 
  **swidTagId** | **string** | The swidTagId of the component | 
  **project** | **string** | The project the component belongs to | 
+ **excludeInactiveProjects** | **bool** | When true, only return components from active projects | 
+ **onlyLatestProjectVersions** | **bool** | When true, only return components from projects flagged as the latest version | 
 
 ### Return type
 
@@ -417,7 +421,7 @@ Name | Type | Description  | Notes
 
 ## GetComponentByUuid
 
-> Component GetComponentByUuid(ctx, uuid).IncludeRepositoryMetaData(includeRepositoryMetaData).IncludeIntegrityMetaData(includeIntegrityMetaData).Execute()
+> Component GetComponentByUuid(ctx, uuid).IncludeRepositoryMetaData(includeRepositoryMetaData).Execute()
 
 Returns a specific component
 
@@ -432,17 +436,16 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
 	uuid := "38400000-8cf0-11bd-b23e-10b96e4ef00d" // string | The UUID of the component to retrieve
 	includeRepositoryMetaData := true // bool | Optionally includes third-party metadata about the component from external repositories (optional)
-	includeIntegrityMetaData := true // bool |  (optional)
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.ComponentAPI.GetComponentByUuid(context.Background(), uuid).IncludeRepositoryMetaData(includeRepositoryMetaData).IncludeIntegrityMetaData(includeIntegrityMetaData).Execute()
+	resp, r, err := apiClient.ComponentAPI.GetComponentByUuid(context.Background(), uuid).IncludeRepositoryMetaData(includeRepositoryMetaData).Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `ComponentAPI.GetComponentByUuid``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
@@ -469,7 +472,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
  **includeRepositoryMetaData** | **bool** | Optionally includes third-party metadata about the component from external repositories | 
- **includeIntegrityMetaData** | **bool** |  | 
 
 ### Return type
 
@@ -506,7 +508,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -579,7 +581,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -661,7 +663,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
@@ -720,7 +722,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {

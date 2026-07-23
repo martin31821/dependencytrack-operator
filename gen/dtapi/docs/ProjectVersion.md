@@ -5,6 +5,7 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Active** | Pointer to **bool** |  | [optional] 
+**IsLatest** | Pointer to **bool** |  | [optional] 
 **Uuid** | Pointer to **string** |  | [optional] 
 **Version** | Pointer to **string** |  | [optional] 
 
@@ -51,6 +52,31 @@ SetActive sets Active field to given value.
 `func (o *ProjectVersion) HasActive() bool`
 
 HasActive returns a boolean if a field has been set.
+
+### GetIsLatest
+
+`func (o *ProjectVersion) GetIsLatest() bool`
+
+GetIsLatest returns the IsLatest field if non-nil, zero value otherwise.
+
+### GetIsLatestOk
+
+`func (o *ProjectVersion) GetIsLatestOk() (*bool, bool)`
+
+GetIsLatestOk returns a tuple with the IsLatest field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetIsLatest
+
+`func (o *ProjectVersion) SetIsLatest(v bool)`
+
+SetIsLatest sets IsLatest field to given value.
+
+### HasIsLatest
+
+`func (o *ProjectVersion) HasIsLatest() bool`
+
+HasIsLatest returns a boolean if a field has been set.
 
 ### GetUuid
 

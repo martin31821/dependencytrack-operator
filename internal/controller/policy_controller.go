@@ -39,8 +39,6 @@ import (
 
 const (
 	policyFinalizer = "dependencytrack.mko.dev/policy-finalizer"
-	conditionReady  = "Ready"
-
 	// Reason values for the Ready condition.
 	reasonCredentialsError      = "CredentialsError"
 	reasonPolicyListFailed      = "PolicyListFailed"

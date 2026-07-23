@@ -62,6 +62,16 @@ spec:
                       enum:
                       - IS
                       - IS_NOT
+                      - MATCHES
+                      - NO_MATCH
+                      - NUMERIC_GREATER_THAN
+                      - NUMERIC_LESS_THAN
+                      - NUMERIC_EQUAL
+                      - NUMERIC_NOT_EQUAL
+                      - NUMERIC_GREATER_THAN_OR_EQUAL
+                      - NUMERIC_LESSER_THAN_OR_EQUAL
+                      - CONTAINS_ALL
+                      - CONTAINS_ANY
                       type: string
                     subject:
                       description: Subject specifies the Dependency-Track property to

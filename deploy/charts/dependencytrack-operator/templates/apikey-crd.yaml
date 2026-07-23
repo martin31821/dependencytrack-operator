@@ -25,7 +25,7 @@ spec:
     - jsonPath: .status.publicId
       name: PublicID
       type: string
-    - jsonPath: .status.conditions[?(@.type=="Reconciled")].status
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
     name: v1alpha1

@@ -12,7 +12,6 @@ Name | Type | Description | Notes
 **Blake3** | Pointer to **string** |  | [optional] 
 **Children** | Pointer to [**[]Component**](Component.md) |  | [optional] 
 **Classifier** | **string** |  | 
-**ComponentMetaInformation** | Pointer to [**ComponentMetaInformation**](ComponentMetaInformation.md) |  | [optional] 
 **Copyright** | Pointer to **string** |  | [optional] 
 **Cpe** | Pointer to **string** |  | [optional] 
 **DependencyGraph** | Pointer to **[]string** |  | [optional] 
@@ -41,6 +40,7 @@ Name | Type | Description | Notes
 **PurlCoordinates** | Pointer to **string** |  | [optional] [readonly] 
 **RepositoryMeta** | Pointer to [**RepositoryMetaComponent**](RepositoryMetaComponent.md) |  | [optional] 
 **ResolvedLicense** | Pointer to [**License**](License.md) |  | [optional] 
+**Scope** | Pointer to **string** |  | [optional] 
 **Sha1** | Pointer to **string** |  | [optional] 
 **Sha256** | Pointer to **string** |  | [optional] 
 **Sha384** | Pointer to **string** |  | [optional] 
@@ -267,31 +267,6 @@ and a boolean to check if the value has been set.
 
 SetClassifier sets Classifier field to given value.
 
-
-### GetComponentMetaInformation
-
-`func (o *Component) GetComponentMetaInformation() ComponentMetaInformation`
-
-GetComponentMetaInformation returns the ComponentMetaInformation field if non-nil, zero value otherwise.
-
-### GetComponentMetaInformationOk
-
-`func (o *Component) GetComponentMetaInformationOk() (*ComponentMetaInformation, bool)`
-
-GetComponentMetaInformationOk returns a tuple with the ComponentMetaInformation field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetComponentMetaInformation
-
-`func (o *Component) SetComponentMetaInformation(v ComponentMetaInformation)`
-
-SetComponentMetaInformation sets ComponentMetaInformation field to given value.
-
-### HasComponentMetaInformation
-
-`func (o *Component) HasComponentMetaInformation() bool`
-
-HasComponentMetaInformation returns a boolean if a field has been set.
 
 ### GetCopyright
 
@@ -982,6 +957,31 @@ SetResolvedLicense sets ResolvedLicense field to given value.
 `func (o *Component) HasResolvedLicense() bool`
 
 HasResolvedLicense returns a boolean if a field has been set.
+
+### GetScope
+
+`func (o *Component) GetScope() string`
+
+GetScope returns the Scope field if non-nil, zero value otherwise.
+
+### GetScopeOk
+
+`func (o *Component) GetScopeOk() (*string, bool)`
+
+GetScopeOk returns a tuple with the Scope field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetScope
+
+`func (o *Component) SetScope(v string)`
+
+SetScope sets Scope field to given value.
+
+### HasScope
+
+`func (o *Component) HasScope() bool`
+
+HasScope returns a boolean if a field has been set.
 
 ### GetSha1
 

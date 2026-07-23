@@ -50,6 +50,20 @@ func Test_dtapi_BomAPIService(t *testing.T) {
 
 	})
 
+	t.Run("Test BomAPIService IsTokenBeingProcessed", func(t *testing.T) {
+
+		t.Skip("skip test") // remove to run test
+
+		var uuid string
+
+		resp, httpRes, err := apiClient.BomAPI.IsTokenBeingProcessed(context.Background(), uuid).Execute()
+
+		require.Nil(t, err)
+		require.NotNil(t, resp)
+		assert.Equal(t, 200, httpRes.StatusCode)
+
+	})
+
 	t.Run("Test BomAPIService UploadBom", func(t *testing.T) {
 
 		t.Skip("skip test") // remove to run test

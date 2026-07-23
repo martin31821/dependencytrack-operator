@@ -20,6 +20,8 @@ rules:
   - dependencytrack.mko.dev
   resources:
   - apikeys
+  - notificationpublishers
+  - notificationrules
   - policies
   - teams
   verbs:
@@ -34,6 +36,8 @@ rules:
   - dependencytrack.mko.dev
   resources:
   - apikeys/finalizers
+  - notificationpublishers/finalizers
+  - notificationrules/finalizers
   - policies/finalizers
   - teams/finalizers
   verbs:
@@ -42,6 +46,8 @@ rules:
   - dependencytrack.mko.dev
   resources:
   - apikeys/status
+  - notificationpublishers/status
+  - notificationrules/status
   - policies/status
   - teams/status
   verbs:

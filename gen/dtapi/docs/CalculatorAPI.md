@@ -1,6 +1,6 @@
 # \CalculatorAPI
 
-All URIs are relative to *https://hyades-api.iris-flair-alpha.vlair-staging.defra01.iris-sensing.net/api*
+All URIs are relative to */api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
@@ -11,7 +11,7 @@ Method | HTTP request | Description
 
 ## GetCvssScores
 
-> Score GetCvssScores(ctx).Vector(vector).Execute()
+> CvssScoreResponse GetCvssScores(ctx).Vector(vector).Execute()
 
 Returns the CVSS base score, impact sub-score and exploitability sub-score
 
@@ -24,11 +24,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {
-	vector := "vector_example" // string | A valid CVSSv2 or CVSSv3 vector
+	vector := "vector_example" // string | A valid CVSSv2, CVSSv3 or CVSSv4 vector
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -37,7 +37,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error when calling `CalculatorAPI.GetCvssScores``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `GetCvssScores`: Score
+	// response from `GetCvssScores`: CvssScoreResponse
 	fmt.Fprintf(os.Stdout, "Response from `CalculatorAPI.GetCvssScores`: %v\n", resp)
 }
 ```
@@ -53,11 +53,11 @@ Other parameters are passed through a pointer to a apiGetCvssScoresRequest struc
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **vector** | **string** | A valid CVSSv2 or CVSSv3 vector | 
+ **vector** | **string** | A valid CVSSv2, CVSSv3 or CVSSv4 vector | 
 
 ### Return type
 
-[**Score**](Score.md)
+[**CvssScoreResponse**](CvssScoreResponse.md)
 
 ### Authorization
 
@@ -88,7 +88,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	openapiclient "github.com/martin31821/dependencytrack-operator/gen/dtapi"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
 )
 
 func main() {

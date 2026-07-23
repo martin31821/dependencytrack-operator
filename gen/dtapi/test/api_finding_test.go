@@ -22,17 +22,6 @@ func Test_dtapi_FindingAPIService(t *testing.T) {
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
 
-	t.Run("Test FindingAPIService AnalyzePortfolio", func(t *testing.T) {
-
-		t.Skip("skip test") // remove to run test
-
-		httpRes, err := apiClient.FindingAPI.AnalyzePortfolio(context.Background()).Execute()
-
-		require.Nil(t, err)
-		assert.Equal(t, 200, httpRes.StatusCode)
-
-	})
-
 	t.Run("Test FindingAPIService AnalyzeProject", func(t *testing.T) {
 
 		t.Skip("skip test") // remove to run test

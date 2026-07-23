@@ -1,0 +1,5488 @@
+openapi: 3.0.3
+info:
+  contact:
+    email: dependencytrack@owasp.org
+    name: The Dependency-Track Authors
+    url: https://github.com/DependencyTrack/dependency-track
+  description: |-
+    # REST API of OWASP Dependency-Track
+
+    ## Pagination
+
+    This API implements token-based pagination.
+    Collection responses have the following structure:
+
+    ```json
+    {
+      "items": [...],
+      "next_page_token": "abcdefg",
+      "total": {
+        "count": 100,
+        "type": "EXACT"
+      }
+    }
+    ```
+
+    `next_page_token` is present when more items exist, and absent otherwise.
+    To fetch the next page, pass it as the `page_token` query parameter.
+
+    To navigate backwards, clients should keep track of previous page tokens
+    as they paginate through collections. The API does *not* provide
+    backward navigation!
+
+    Collections that support sorting will only consider the `sort_by`
+    and `sort_direction` query parameters for the request of the first
+    page. For subsequent pages, sorting preferences are bound to the
+    page token.
+
+    Page tokens are opaque strings. Clients should not try to interpret
+    or generate them. Their format may change without notice.
+
+    The `total` object discloses how many items exist in the collection
+    *across all pages*. Because counting is expensive, some collections
+    that hold *a lot* of items may return partial counts (type `AT_LEAST`)
+    instead of exact counts (type `EXACT`). Which type to expect is usually
+    documented in the operation's description.
+
+    ## Sorting
+
+    Items in a collection can be sorted using the `sort_by` and `sort_direction`
+    query parameters. Which fields are sortable is documented in the respective
+    operation's description.
+
+    Note that if no sortable fields are documented for an operation,
+    sorting is not supported *at all*.
+
+    ## Field expansion
+
+    Some collection endpoints support an `expand` query parameter.
+    Passing an expand value includes optional fields in each response item
+    that are omitted by default, typically because they are expensive to compute
+    and only needed in specific contexts.
+
+    Valid `expand` values for an endpoint are listed in its operation description.
+    Unknown values are silently ignored.
+
+    ## Errors
+
+    All error responses use the `application/problem+json` media type
+    as defined in [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html).
+
+    Example:
+
+    ```json
+    {
+      "type": "about:blank",
+      "status": 404,
+      "title": "Resource Not Found",
+      "detail": "No project with UUID 0976ef46-e4a0-4be4-8b0e-00e9d3625c1f exists"
+    }
+    ```
+
+    ## Authentication
+
+    Two credential types are accepted:
+
+    - **API key** via the `X-Api-Key` request header. API keys are
+      long-lived and intended for machine-to-machine integrations.
+    - **Bearer token** via the `Authorization: Bearer <token>` request
+      header. Bearer tokens are short-lived, user-bound, and opaque
+      server-issued session tokens.
+
+    Bearer tokens are obtained from one of the following endpoints:
+
+    - `POST /api/v1/user/login`
+    - `POST /api/v1/user/oidc/login`
+
+    API v2 does not yet provide its own login endpoints; clients use
+    the v1 endpoints above to acquire tokens and then call v2 with them.
+
+    Tokens are valid for 8 hours by default and **cannot be refreshed**.
+    Clients must re-authenticate once a token expires.
+
+    Requests with missing or invalid credentials are rejected with
+    `401 Unauthorized`.
+
+    ## Authorization
+
+    Access is gated by named permissions. Operations document
+    the permission(s) they require; operations without a documented
+    permission requirement only require authentication.
+
+    When the *Portfolio Access Control* feature is enabled
+    (disabled by default), project-scoped operations additionally enforce
+    per-project access via team membership. The `PORTFOLIO_ACCESS_CONTROL_BYPASS`
+    permission grants access to all projects regardless of team mappings.
+    When the feature is disabled, all authenticated callers holding the required
+    permission can access all projects.
+
+    Authenticated requests that lack the required permission, or that
+    target a project the caller cannot access, are rejected with
+    `403 Forbidden`.
+
+    ## HTTP Methods
+
+    | Method   | Semantics                  |
+    |----------|----------------------------|
+    | `GET`    | Retrieve a resource        |
+    | `POST`   | Create a new resource      |
+    | `PUT`    | Update a resource          |
+    | `PATCH`  | Partially update a resource|
+    | `DELETE` | Delete a resource          |
+
+    ## Response Conventions
+
+    Create and update operations (`POST`, `PUT`, `PATCH`) do not return
+    the full resource in the response. They return either no body,
+    or only server-generated identifiers (e.g. a UUID).
+    `POST` responses may include a `Location` header linking to the
+    created resource.
+
+    Delete operations return `204 No Content` with no body.
+
+    ## Deprecations
+
+    Operations may be removed or replaced over time. When a response
+    carries the `X-API-Deprecated: true` header, the operation that
+    produced it is deprecated and may be removed in a future release.
+    Clients should check for this header on every response and surface
+    it (e.g. via a log warning) so that operators are aware of upcoming
+    breakages. The respective operation's description points out which
+    alternative operation(s) to use.
+
+    ## Internal operations
+
+    Operations under the `/internal` path prefix expose system internals
+    and are reserved for first-party use. They are **not** part of the
+    stable v2 API contract and may change or be removed without notice.
+    Third-party clients should not depend on them.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  title: OWASP Dependency-Track
+  version: 2.0.0
+servers:
+- url: /api/v2
+security:
+- apiKeyAuth: []
+- bearerAuth: []
+tags:
+- description: Endpoints related to components
+  name: Components
+- description: Endpoints related to extensions
+  name: Extensions
+- description: Endpoints related to projects
+  name: Projects
+- description: Endpoints related to secrets
+  name: Secrets
+- description: Endpoints exposing the capabilities of the running server
+  name: System Capabilities
+- description: Endpoints related to task queue management
+  name: Task Queues
+- description: Endpoints related to vulnerability data sources
+  name: Vuln Data Sources
+- description: Endpoints related to vulnerability policies
+  name: Vuln Policies
+- description: Endpoints related to workflows
+  name: Workflows
+paths:
+  /components:
+    get:
+      description: |-
+        Retrieves a list of all components matching the provided filter criteria.
+
+        Text filters are case-insensitive.
+
+        ### Sortable fields
+
+        Sorting is supported for the following fields:
+
+        * `name`
+        * `group`
+        * `last_inherited_risk_score`
+
+        ### Expandable fields
+
+        The following fields can be included via `expand`:
+
+        * `metrics`
+        * `package_metadata`
+        * `package_artifact_metadata`
+
+        Requires permission `VIEW_PORTFOLIO`
+      operationId: listComponents
+      parameters:
+      - description: Filter by group (substring match)
+        explode: true
+        in: query
+        name: group_contains
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Filter by name (substring match)
+        explode: true
+        in: query
+        name: name_contains
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Filter by version (substring match)
+        explode: true
+        in: query
+        name: version_contains
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: |-
+          Filter by PURL (prefix match).
+
+          Must be a valid PURL, with at least `pkg:<ecosystem>/<name>` populated.
+        explode: true
+        in: query
+        name: purl_prefix
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: |-
+          Filter by CPE (exact match).
+
+          Must be a valid CPE.
+        explode: true
+        in: query
+        name: cpe
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Filter by SWID Tag ID (substring match)
+        explode: true
+        in: query
+        name: swid_tag_id_contains
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: The hash type to filter by
+        explode: true
+        in: query
+        name: hash_type
+        required: false
+        schema:
+          enum:
+          - MD5
+          - SHA1
+          - SHA_256
+          - SHA_384
+          - SHA_512
+          - SHA3_256
+          - SHA3_384
+          - SHA3_512
+          - BLAKE2B_256
+          - BLAKE2B_384
+          - BLAKE2B_512
+          - BLAKE3
+          type: string
+        style: form
+      - description: |-
+          Filter by hash value (exact match).
+
+          Requires `hash_type` to be set.
+        explode: true
+        in: query
+        name: hash
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: |-
+          Filter by package artifact publish date (inclusive lower bound).
+
+          Note that components without resolved package artifact metadata,
+          or whose upstream repository did not report a publication date,
+          are excluded whenever `package_artifact_published_since` or
+          `package_artifact_published_before` is set.
+        explode: true
+        in: query
+        name: package_artifact_published_since
+        required: false
+        schema:
+          $ref: "#/components/schemas/timestamp"
+        style: form
+      - description: Filter by package artifact publish date (exclusive upper bound).
+        explode: true
+        in: query
+        name: package_artifact_published_before
+        required: false
+        schema:
+          $ref: "#/components/schemas/timestamp"
+        style: form
+      - description: |-
+          Filter by the state of the project that the component belongs to.
+
+          Omit to include components from projects in any state.
+        explode: true
+        in: query
+        name: project_state
+        required: false
+        schema:
+          $ref: "#/components/schemas/project-state"
+        style: form
+      - description: |-
+          Filter by whether the project the component belongs to is flagged as the latest version.
+
+          When `true`, only components from latest-version projects are returned.
+          When `false`, only components from non-latest projects are returned.
+          Omit to include components regardless of the flag.
+        explode: true
+        in: query
+        name: project_latest_version
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: Optional fields to include in each component response item. Unknown
+          values are silently ignored.
+        explode: true
+        in: query
+        name: expand
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: form
+      - description: Maximum number of items to retrieve from the collection
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          format: int32
+          maximum: 1000
+          minimum: 1
+          type: integer
+        style: form
+      - description: Opaque token pointing to a specific position in a collection
+        explode: true
+        in: query
+        name: page_token
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: sort_direction
+        required: false
+        schema:
+          $ref: "#/components/schemas/sort-direction"
+        style: form
+      - description: Field to sort by. Refer to the operation description for information
+          about which fields are sortable.
+        explode: true
+        in: query
+        name: sort_by
+        required: false
+        schema:
+          maxLength: 255
+          minLength: 1
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list-components-response"
+          description: A list of components matching the provided filters
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/listComponents_400_response"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: List all components
+      tags:
+      - Components
+    post:
+      description: Requires permission `PORTFOLIO_MANAGEMENT` or `PORTFOLIO_MANAGEMENT_UPDATE`
+      operationId: createComponent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/create-component-request"
+        required: true
+      responses:
+        "201":
+          description: Component Created
+          headers:
+            Location:
+              description: URL of the created component
+              explode: false
+              schema:
+                format: uri
+                type: string
+              style: simple
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/createComponent_400_response"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "409":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 409
+                title: Conflict
+                detail: The resource already exists.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Creates a new component for the project
+      tags:
+      - Components
+  /extension-points:
+    get:
+      description: |-
+        Returns a list of extension points, sorted by name in ascending order.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ` permission.
+      operationId: listExtensionPoints
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list-extension-points-response"
+          description: List of extension points
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: List all extension points
+      tags:
+      - Extensions
+  /extension-points/{extension_point_name}/extensions:
+    get:
+      description: |-
+        Returns a list of extensions for a given extension point, sorted by name in ascending order.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ` permission.
+      operationId: listExtensions
+      parameters:
+      - description: Name of the extension point
+        explode: false
+        in: path
+        name: extension_point_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list-extensions-response"
+          description: List of extensions
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: List all extensions
+      tags:
+      - Extensions
+  /extension-points/{extension_point_name}/extensions/{extension_name}/config:
+    get:
+      description: |-
+        Returns the configuration of an extension.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ` permission.
+      operationId: getExtensionConfig
+      parameters:
+      - description: Name of the extension point
+        explode: false
+        in: path
+        name: extension_point_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Name of the extension
+        explode: false
+        in: path
+        name: extension_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/get-extension-config-response"
+          description: List of extensions
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Get extension configuration
+      tags:
+      - Extensions
+    put:
+      description: |-
+        Updates the configuration of an extension.
+
+        **Do not use clear text credentials in the supplied config**.
+        Fields annotated with `x-secret-ref` in the config schema expect
+        a name of a managed secret, which is resolved internally by the API.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_UPDATE` permission.
+      operationId: updateExtensionConfig
+      parameters:
+      - description: Name of the extension point
+        explode: false
+        in: path
+        name: extension_point_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Name of the extension
+        explode: false
+        in: path
+        name: extension_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/update-extension-config-request"
+        required: true
+      responses:
+        "204":
+          description: Configuration updated
+        "304":
+          description: Not Modified
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/updateExtensionConfig_400_response"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Update extension configuration
+      tags:
+      - Extensions
+  /extension-points/{extension_point_name}/extensions/{extension_name}/config-schema:
+    get:
+      description: |-
+        Returns the JSON schema for an extension's configuration.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ` permission.
+      operationId: getExtensionConfigSchema
+      parameters:
+      - description: Name of the extension point
+        explode: false
+        in: path
+        name: extension_point_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Name of the extension
+        explode: false
+        in: path
+        name: extension_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/extension-config-schema"
+          description: Extension config schema
+        "204":
+          description: Extension has no config schema
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Get extension configuration schema
+      tags:
+      - Extensions
+  /extension-points/{extension_point_name}/extensions/{extension_name}/test:
+    post:
+      description: |-
+        Tests an extension.
+
+        If the extension is configurable (i.e. `/config-schema` returns status `200`),
+        a valid configuration **must** be provided in the test request.
+        The configuration is validated against the applicable JSON schema.
+
+        **Do not use clear text credentials in the supplied config**.
+        Fields annotated with `x-secret-ref` in the config schema expect
+        a name of a managed secret, which is resolved internally by the API.
+
+        Test results contain one or more checks, each of which can have a status of
+        `PASSED`, `FAILED`, or `SKIPPED`. If *at least one* check is `FAILED`,
+        the entire test should be considered `FAILED`.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_UPDATE` permission.
+      operationId: testExtension
+      parameters:
+      - description: Name of the extension point
+        explode: false
+        in: path
+        name: extension_point_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Name of the extension
+        explode: false
+        in: path
+        name: extension_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/test-extension-request"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/test-extension-response"
+          description: Test result
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/updateExtensionConfig_400_response"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Test extension
+      tags:
+      - Extensions
+  /projects/{uuid}/clone:
+    post:
+      description: Requires permission `PORTFOLIO_MANAGEMENT` or `PORTFOLIO_MANAGEMENT_CREATE`
+      operationId: cloneProject
+      parameters:
+      - description: The UUID of the project to clone
+        explode: false
+        in: path
+        name: uuid
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/clone-project-request"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/clone-project-response"
+          description: Project cloned
+          headers:
+            Location:
+              description: URL of the cloned project
+              explode: false
+              schema:
+                format: uri
+                type: string
+              style: simple
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        "409":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 409
+                title: Conflict
+                detail: The resource already exists.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Clones a given project.
+      tags:
+      - Projects
+  /projects/{uuid}/components:
+    get:
+      description: |-
+        Requires permission `VIEW_PORTFOLIO`
+
+        ### Sortable fields
+
+        Sorting is supported for the following fields:
+
+        * `name`
+        * `group`
+        * `last_inherited_risk_score`
+        * `package_artifact_metadata.published_at`
+
+        Components without resolved artifact metadata, or whose upstream registry did not
+        report a publication date, are placed at the end of the result for both sort
+        directions when sorting by `package_artifact_metadata.published_at`.
+
+        ### Expandable fields
+
+        The following fields can be included via `expand`:
+
+        * `metrics`
+        * `package_metadata`
+        * `package_artifact_metadata`
+        * `occurrence_count`
+      operationId: listProjectComponents
+      parameters:
+      - description: The UUID of the project to retrieve components for
+        explode: false
+        in: path
+        name: uuid
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      - description: Optionally exclude recent components so only outdated components
+          are returned
+        explode: true
+        in: query
+        name: only_outdated
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: Optionally exclude transitive dependencies so only direct dependencies
+          are returned
+        explode: true
+        in: query
+        name: only_direct
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: Optional free-text search term. Matches components whose `group`
+          or `name` contains the given value (case-insensitive).
+        explode: true
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Optional fields to include in each component response item. Unknown
+          values are silently ignored.
+        explode: true
+        in: query
+        name: expand
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: form
+      - description: Maximum number of items to retrieve from the collection
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          format: int32
+          maximum: 1000
+          minimum: 1
+          type: integer
+        style: form
+      - description: Opaque token pointing to a specific position in a collection
+        explode: true
+        in: query
+        name: page_token
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: sort_direction
+        required: false
+        schema:
+          $ref: "#/components/schemas/sort-direction"
+        style: form
+      - description: Field to sort by. Refer to the operation description for information
+          about which fields are sortable.
+        explode: true
+        in: query
+        name: sort_by
+        required: false
+        schema:
+          maxLength: 255
+          minLength: 1
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list-project-components-response"
+          description: A list of all components for a given project
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/listComponents_400_response"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Retrieves a list of all components for a given project.
+      tags:
+      - Projects
+  /secrets:
+    get:
+      description: |-
+        Returns a paginated list of secret metadata.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ` permission.
+      operationId: listSecretMetadata
+      parameters:
+      - description: Optional search text to filter secrets by. Filtering uses case-insensitive
+          "starts with" semantics on the secret name.
+        explode: true
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Opaque token pointing to a specific position in a collection
+        explode: true
+        in: query
+        name: page_token
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Maximum number of items to retrieve from the collection
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          format: int32
+          maximum: 1000
+          minimum: 1
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list-secrets-response"
+          description: Paginated list of secret metadata
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: List secret metadata
+      tags:
+      - Secrets
+    post:
+      description: |-
+        Creates a new secret.
+
+        Requires the `SECRET_MANAGEMENT` or `SECRET_MANAGEMENT_CREATE` permission.
+
+        Administrators can configure the secret manager to be read-only.
+        In that case, create requests will be rejected with status code `400`.
+      operationId: createSecret
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/create-secret-request"
+        required: true
+      responses:
+        "201":
+          description: Secret created
+          headers:
+            Location:
+              description: URL of the created secret
+              explode: false
+              schema:
+                format: uri
+                type: string
+              style: simple
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/createComponent_400_response"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "409":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 409
+                title: Conflict
+                detail: The resource already exists.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Create a secret
+      tags:
+      - Secrets
+  /secrets/{name}:
+    delete:
+      description: |-
+        Deletes an existing secret.
+
+        Requires the `SECRET_MANAGEMENT` or `SECRET_MANAGEMENT_DELETE` permission.
+
+        Administrators can configure the secret manager to be read-only.
+        In that case, delete requests will be rejected with status code `400`.
+      operationId: deleteSecret
+      parameters:
+      - description: The name of the secret
+        explode: false
+        in: path
+        name: name
+        required: true
+        schema:
+          $ref: "#/components/schemas/secret-name"
+        style: simple
+      responses:
+        "204":
+          description: Secret deleted
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/createComponent_400_response"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Delete a secret
+      tags:
+      - Secrets
+    get:
+      description: |-
+        Returns metadata about a given secret.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ` permission.
+      operationId: getSecretMetadata
+      parameters:
+      - description: The name of the secret
+        explode: false
+        in: path
+        name: name
+        required: true
+        schema:
+          $ref: "#/components/schemas/secret-name"
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/secret-metadata"
+          description: Secret metadata
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Get secret metadata
+      tags:
+      - Secrets
+    patch:
+      description: |-
+        Updates an existing secret.
+
+        Requires the `SECRET_MANAGEMENT` or `SECRET_MANAGEMENT_UPDATE` permission.
+
+        Administrators can configure the secret manager to be read-only.
+        In that case, update requests will be rejected with status code `400`.
+      operationId: updateSecret
+      parameters:
+      - description: The name of the secret
+        explode: false
+        in: path
+        name: name
+        required: true
+        schema:
+          $ref: "#/components/schemas/secret-name"
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/update-secret-request"
+        required: true
+      responses:
+        "204":
+          description: Secret updated
+        "304":
+          description: Not modified
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/createComponent_400_response"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Update a secret
+      tags:
+      - Secrets
+  /vuln-policies:
+    get:
+      description: |-
+        Returns a paginated list of vulnerability policies, sorted by priority
+        (ascending) and name (ascending).
+
+        Reports `EXACT` total counts for up to 500 items, and `AT_LEAST` past that.
+
+        Requires permission `POLICY_MANAGEMENT` or `POLICY_MANAGEMENT_READ`.
+      operationId: listVulnPolicies
+      parameters:
+      - description: Maximum number of items to retrieve from the collection
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          format: int32
+          maximum: 1000
+          minimum: 1
+          type: integer
+        style: form
+      - description: Opaque token pointing to a specific position in a collection
+        explode: true
+        in: query
+        name: page_token
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: "Filter by name (partial match, case-insensitive)"
+        explode: true
+        in: query
+        name: name
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list-vuln-policies-response"
+          description: Paginated list of vulnerability policies
+        "400":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 400
+                title: Bad Request
+                detail: The request could not be processed because it failed validation.
+                errors:
+                - path: foo.bar
+                  value: baz
+                  message: Must be a number
+              schema:
+                $ref: "#/components/schemas/invalid-request-problem-details"
+          description: Bad request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: List vulnerability policies
+      tags:
+      - Vuln Policies
+    post:
+      description: |-
+        Creates a user-managed vulnerability policy.
+
+        CEL conditions are compiled server-side. On compilation failure,
+        a 400 response with structured error details is returned.
+
+        Requires permission `POLICY_MANAGEMENT` or `POLICY_MANAGEMENT_CREATE`.
+      operationId: createVulnPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/create-vuln-policy-request"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/createVulnPolicy_201_response"
+          description: Policy created
+          headers:
+            Location:
+              description: URL of the created policy
+              explode: false
+              schema:
+                format: uri
+                type: string
+              style: simple
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/createVulnPolicy_400_response"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "409":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 409
+                title: Conflict
+                detail: The resource already exists.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Create a vulnerability policy
+      tags:
+      - Vuln Policies
+  /vuln-policies/{uuid}:
+    delete:
+      description: |-
+        Deletes a user-managed vulnerability policy.
+
+        Policies managed by a bundle can not be deleted.
+
+        Analysis records matched by this policy are reset upon deletion.
+
+        Requires permission `POLICY_MANAGEMENT` or `POLICY_MANAGEMENT_DELETE`.
+      operationId: deleteVulnPolicy
+      parameters:
+      - description: UUID of the vulnerability policy
+        explode: false
+        in: path
+        name: uuid
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Policy deleted
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Delete a vulnerability policy
+      tags:
+      - Vuln Policies
+    get:
+      description: |-
+        Returns a vulnerability policy.
+
+        Requires permission `POLICY_MANAGEMENT` or `POLICY_MANAGEMENT_READ`.
+      operationId: getVulnPolicy
+      parameters:
+      - description: UUID of the vulnerability policy
+        explode: false
+        in: path
+        name: uuid
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/get-vuln-policy-response"
+          description: The vulnerability policy
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Get a vulnerability policy
+      tags:
+      - Vuln Policies
+    put:
+      description: |-
+        Replaces a user-managed vulnerability policy with the provided data.
+
+        Policies managed by a bundle can not be modified.
+
+        Requires permission `POLICY_MANAGEMENT` or `POLICY_MANAGEMENT_UPDATE`.
+      operationId: updateVulnPolicy
+      parameters:
+      - description: UUID of the vulnerability policy
+        explode: false
+        in: path
+        name: uuid
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/update-vuln-policy-request"
+        required: true
+      responses:
+        "204":
+          description: Policy updated
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/createVulnPolicy_400_response"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        "409":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 409
+                title: Conflict
+                detail: The resource already exists.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Replace a vulnerability policy
+      tags:
+      - Vuln Policies
+  /vuln-policy-bundles:
+    get:
+      description: |-
+        Returns a list of vulnerability policy bundles.
+
+        Requires permission `POLICY_MANAGEMENT` or `POLICY_MANAGEMENT_READ`.
+      operationId: listVulnPolicyBundles
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list-vuln-policy-bundles-response"
+          description: List of vulnerability policy bundles
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: List vulnerability policy bundles
+      tags:
+      - Vuln Policies
+  /vuln-policy-bundles/{uuid}:
+    delete:
+      description: |-
+        Deletes a vulnerability policy bundle and cascade-deletes all associated policies.
+
+        Analysis records matched by deleted policies are reset.
+
+        Requires permission `POLICY_MANAGEMENT` or `POLICY_MANAGEMENT_DELETE`.
+      operationId: deleteVulnPolicyBundle
+      parameters:
+      - description: UUID of the vulnerability policy bundle
+        explode: false
+        in: path
+        name: uuid
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Bundle deleted
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Delete a vulnerability policy bundle
+      tags:
+      - Vuln Policies
+  /vuln-policy-bundles/{uuid}/sync-runs:
+    post:
+      description: |-
+        Triggers a synchronization run for the given vulnerability policy bundle.
+
+        Requires permission `POLICY_MANAGEMENT` or `POLICY_MANAGEMENT_UPDATE`.
+      operationId: triggerVulnPolicyBundleSyncRun
+      parameters:
+      - description: UUID of the vulnerability policy bundle
+        explode: false
+        in: path
+        name: uuid
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "202":
+          description: Sync run triggered
+          headers:
+            Location:
+              description: URL of the latest sync run resource.
+              explode: false
+              schema:
+                format: uri
+                type: string
+              style: simple
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Sync run cannot be started
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: A sync run is already in progress
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Trigger a vulnerability policy bundle sync run
+      tags:
+      - Vuln Policies
+  /vuln-policy-bundles/{uuid}/sync-runs/latest:
+    get:
+      description: |-
+        Returns the status of the most recent synchronization run for a given
+        vulnerability policy bundle.
+
+        Returns 404 if no sync run is available
+        (e.g. none has been triggered yet, or the most recent run
+        is no longer retained), or if the bundle is unknown.
+
+        Requires permission `POLICY_MANAGEMENT` or `POLICY_MANAGEMENT_READ`.
+      operationId: getLatestVulnPolicyBundleSyncRun
+      parameters:
+      - description: UUID of the vulnerability policy bundle
+        explode: false
+        in: path
+        name: uuid
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/vuln-policy-bundle-sync-status"
+          description: Sync run status
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Get the latest vulnerability policy bundle sync run
+      tags:
+      - Vuln Policies
+  /vuln-data-sources/{name}/mirror-runs:
+    post:
+      description: |-
+        Triggers a mirror run for the given vulnerability data source.
+
+        Requires permission `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_UPDATE`.
+      operationId: triggerVulnDataSourceMirrorRun
+      parameters:
+      - description: "Name of the vulnerability data source (e.g. `nvd`, `osv`, `github`)."
+        explode: false
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "202":
+          description: Mirror run triggered
+          headers:
+            Location:
+              description: URL of the latest mirror run resource.
+              explode: false
+              schema:
+                format: uri
+                type: string
+              style: simple
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Mirror run cannot be started
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: A mirror run is already in progress
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Trigger a vulnerability data source mirror run
+      tags:
+      - Vuln Data Sources
+  /vuln-data-sources/{name}/mirror-runs/latest:
+    get:
+      description: |-
+        Returns the status of the most recent mirror run for a given
+        vulnerability data source.
+
+        Returns 404 if no mirror run is available
+        (e.g. none has been triggered yet, or the most recent run
+        is no longer retained), or if the data source is unknown.
+
+        Requires permission `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ`.
+      operationId: getLatestVulnDataSourceMirrorRun
+      parameters:
+      - description: "Name of the vulnerability data source (e.g. `nvd`, `osv`, `github`)."
+        explode: false
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/vuln-data-source-mirror-status"
+          description: Mirror run status
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Get the latest vulnerability data source mirror run
+      tags:
+      - Vuln Data Sources
+  /internal/system-capabilities:
+    get:
+      description: Returns the capabilities of the system.
+      operationId: getSystemCapabilities
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/system-capabilities-response"
+          description: System capabilities
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Get system capabilities
+      tags:
+      - System Capabilities
+  /internal/task-queues/{type}:
+    get:
+      description: |-
+        Returns a paginated list of task queues of the given type.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ` permission.
+      operationId: listTaskQueues
+      parameters:
+      - description: Type of task queues to list
+        explode: false
+        in: path
+        name: type
+        required: true
+        schema:
+          $ref: "#/components/schemas/task-queue-type"
+        style: simple
+      - description: Maximum number of items to retrieve from the collection
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          format: int32
+          maximum: 1000
+          minimum: 1
+          type: integer
+        style: form
+      - description: Opaque token pointing to a specific position in a collection
+        explode: true
+        in: query
+        name: page_token
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list-task-queues-response"
+          description: Paginated list of task queues
+        "400":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 400
+                title: Bad Request
+                detail: The request could not be processed because it failed validation.
+                errors:
+                - path: foo.bar
+                  value: baz
+                  message: Must be a number
+              schema:
+                $ref: "#/components/schemas/invalid-request-problem-details"
+          description: Bad request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: List task queues
+      tags:
+      - Task Queues
+  /internal/task-queues/{type}/{name}:
+    patch:
+      description: |-
+        Updates the status and/or capacity of a task queue.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_UPDATE` permission.
+      operationId: updateTaskQueue
+      parameters:
+      - description: Type of the task queue
+        explode: false
+        in: path
+        name: type
+        required: true
+        schema:
+          $ref: "#/components/schemas/task-queue-type"
+        style: simple
+      - description: Name of the task queue
+        explode: false
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/update-task-queue-request"
+        required: true
+      responses:
+        "204":
+          description: Task queue updated
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Update a task queue
+      tags:
+      - Task Queues
+  /internal/workflow-instances/{id}:
+    get:
+      description: |-
+        Returns run metadata of a given workflow instance.
+
+        Multiple runs can share an instance ID, but only a single run can exist
+        in non-terminal state at any given time. Thus, this operation only
+        returns metadata if a run in non-terminal state exists.
+
+        To list all runs for an instance ID, including terminated ones,
+        use the `/internal/workflow-runs` endpoint and filter by `workflow_instance_id`.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ` permission.
+      operationId: getWorkflowInstance
+      parameters:
+      - description: ID of the workflow instance
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/workflow-run-metadata"
+          description: Workflow run metadata
+        "400":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 400
+                title: Bad Request
+                detail: The request could not be processed because it failed validation.
+                errors:
+                - path: foo.bar
+                  value: baz
+                  message: Must be a number
+              schema:
+                $ref: "#/components/schemas/invalid-request-problem-details"
+          description: Bad request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Get a workflow instance
+      tags:
+      - Workflows
+  /internal/workflow-runs:
+    get:
+      description: |-
+        Returns a paginated list of workflow runs.
+
+        ### Sortable fields
+
+        Sorting is supported for the for the following fields:
+
+        * `id`
+        * `created_at`
+        * `completed_at`
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ` permission.
+      operationId: listWorkflowRuns
+      parameters:
+      - description: Name of the workflow to filter by. Must be an exact match.
+        explode: true
+        in: query
+        name: workflow_name
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Version of the workflow to filter by. Must be an exact match.
+        explode: true
+        in: query
+        name: workflow_version
+        required: false
+        schema:
+          format: int32
+          maximum: 100
+          minimum: 1
+          type: integer
+        style: form
+      - description: Workflow instance ID to filter by. Must be an exact match.
+        explode: true
+        in: query
+        name: workflow_instance_id
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Status to filter by
+        explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          $ref: "#/components/schemas/workflow-run-status"
+        style: form
+      - description: |-
+          Filter by label in `key=value` form. Repeat to require multiple labels.
+          A run matches only if it carries every supplied label.
+          On duplicate keys the last occurrence wins.
+        explode: true
+        in: query
+        name: label
+        required: false
+        schema:
+          items:
+            pattern: "^[^=]+=.*$"
+            type: string
+          type: array
+        style: form
+      - description: Filter runs created on or after this timestamp.
+        explode: true
+        in: query
+        name: created_since
+        required: false
+        schema:
+          $ref: "#/components/schemas/timestamp"
+        style: form
+      - description: Filter runs created before this timestamp.
+        explode: true
+        in: query
+        name: created_before
+        required: false
+        schema:
+          $ref: "#/components/schemas/timestamp"
+        style: form
+      - description: Filter runs completed on or after this timestamp.
+        explode: true
+        in: query
+        name: completed_since
+        required: false
+        schema:
+          $ref: "#/components/schemas/timestamp"
+        style: form
+      - description: Filter runs completed before this timestamp.
+        explode: true
+        in: query
+        name: completed_before
+        required: false
+        schema:
+          $ref: "#/components/schemas/timestamp"
+        style: form
+      - description: Maximum number of items to retrieve from the collection
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          format: int32
+          maximum: 1000
+          minimum: 1
+          type: integer
+        style: form
+      - description: Opaque token pointing to a specific position in a collection
+        explode: true
+        in: query
+        name: page_token
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: sort_direction
+        required: false
+        schema:
+          $ref: "#/components/schemas/sort-direction"
+        style: form
+      - description: Field to sort by. Refer to the operation description for information
+          about which fields are sortable.
+        explode: true
+        in: query
+        name: sort_by
+        required: false
+        schema:
+          maxLength: 255
+          minLength: 1
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list-workflow-runs-response"
+          description: Paginated list of workflow runs
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/listWorkflowRuns_400_response"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: List all workflow runs
+      tags:
+      - Workflows
+  /internal/workflow-runs/{id}:
+    get:
+      description: |-
+        Returns metadata of a given workflow run.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ` permission.
+      operationId: getWorkflowRun
+      parameters:
+      - description: ID of the workflow run
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/workflow-run-metadata"
+          description: Workflow run metadata
+        "400":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 400
+                title: Bad Request
+                detail: The request could not be processed because it failed validation.
+                errors:
+                - path: foo.bar
+                  value: baz
+                  message: Must be a number
+              schema:
+                $ref: "#/components/schemas/invalid-request-problem-details"
+          description: Bad request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 404
+                title: Not Found
+                detail: The requested resource could not be found.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Not found
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: Get a workflow run
+      tags:
+      - Workflows
+  /internal/workflow-runs/{id}/events:
+    get:
+      description: |-
+        Returns a paginated list of workflow run events, sorted by sequence number.
+
+        Requires the `SYSTEM_CONFIGURATION` or `SYSTEM_CONFIGURATION_READ` permission.
+      operationId: listWorkflowRunEvents
+      parameters:
+      - description: ID of the workflow run
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      - description: |-
+          Sequence number of the last seen event.
+          May be used to continuously poll for new events.
+          Can not be used together with `page_token`.
+        explode: true
+        in: query
+        name: from_sequence_number
+        required: false
+        schema:
+          format: int32
+          minimum: 0
+          type: integer
+        style: form
+      - description: Maximum number of items to retrieve from the collection
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          format: int32
+          maximum: 1000
+          minimum: 1
+          type: integer
+        style: form
+      - description: Opaque token pointing to a specific position in a collection
+        explode: true
+        in: query
+        name: page_token
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: sort_direction
+        required: false
+        schema:
+          $ref: "#/components/schemas/sort-direction"
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list-workflow-run-events-response"
+          description: Paginated list of workflow run events
+        "400":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 400
+                title: Bad Request
+                detail: The request could not be processed because it failed validation.
+                errors:
+                - path: foo.bar
+                  value: baz
+                  message: Must be a number
+              schema:
+                $ref: "#/components/schemas/invalid-request-problem-details"
+          description: Bad request
+        "401":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 401
+                title: Unauthorized
+                detail: Not authorized to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              example:
+                type: about:blank
+                status: 403
+                title: Forbidden
+                detail: Not permitted to access the requested resource.
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Forbidden
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/problem-details"
+          description: Unexpected error
+      summary: List all events of a workflow run
+      tags:
+      - Workflows
+components:
+  parameters:
+    pagination-limit:
+      description: Maximum number of items to retrieve from the collection
+      explode: true
+      in: query
+      name: limit
+      required: false
+      schema:
+        default: 100
+        format: int32
+        maximum: 1000
+        minimum: 1
+        type: integer
+      style: form
+    page-token:
+      description: Opaque token pointing to a specific position in a collection
+      explode: true
+      in: query
+      name: page_token
+      required: false
+      schema:
+        type: string
+      style: form
+    sort-direction:
+      explode: true
+      in: query
+      name: sort_direction
+      required: false
+      schema:
+        $ref: "#/components/schemas/sort-direction"
+      style: form
+    sort-by:
+      description: Field to sort by. Refer to the operation description for information
+        about which fields are sortable.
+      explode: true
+      in: query
+      name: sort_by
+      required: false
+      schema:
+        maxLength: 255
+        minLength: 1
+        type: string
+      style: form
+  responses:
+    generic-unauthorized-error:
+      content:
+        application/problem+json:
+          example:
+            type: about:blank
+            status: 401
+            title: Unauthorized
+            detail: Not authorized to access the requested resource.
+          schema:
+            $ref: "#/components/schemas/problem-details"
+      description: Unauthorized
+    generic-forbidden-error:
+      content:
+        application/problem+json:
+          example:
+            type: about:blank
+            status: 403
+            title: Forbidden
+            detail: Not permitted to access the requested resource.
+          schema:
+            $ref: "#/components/schemas/problem-details"
+      description: Forbidden
+    generic-error:
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/problem-details"
+      description: Unexpected error
+    generic-conflict-error:
+      content:
+        application/problem+json:
+          example:
+            type: about:blank
+            status: 409
+            title: Conflict
+            detail: The resource already exists.
+          schema:
+            $ref: "#/components/schemas/problem-details"
+      description: Forbidden
+    generic-not-found-error:
+      content:
+        application/problem+json:
+          example:
+            type: about:blank
+            status: 404
+            title: Not Found
+            detail: The requested resource could not be found.
+          schema:
+            $ref: "#/components/schemas/problem-details"
+      description: Not found
+    invalid-request-error:
+      content:
+        application/problem+json:
+          example:
+            type: about:blank
+            status: 400
+            title: Bad Request
+            detail: The request could not be processed because it failed validation.
+            errors:
+            - path: foo.bar
+              value: baz
+              message: Must be a number
+          schema:
+            $ref: "#/components/schemas/invalid-request-problem-details"
+      description: Bad request
+  schemas:
+    timestamp:
+      description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+      example: 1752209050377
+      format: int64
+      type: integer
+    project-state:
+      enum:
+      - ACTIVE
+      - INACTIVE
+      type: string
+    sort-direction:
+      enum:
+      - ASC
+      - DESC
+      type: string
+    list-components-response:
+      allOf:
+      - $ref: "#/components/schemas/paginated-response"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/list-components-response-item"
+            type: array
+        required:
+        - items
+        type: object
+        example: null
+      example:
+        total:
+          count: 0
+          type: AT_LEAST
+        next_page_token: next_page_token
+        items:
+        - internal: true
+          copyright: copyright
+          project:
+            name: name
+            version: version
+            uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          purl: purl
+          version: version
+          uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          swid_tag_id: swid_tag_id
+          license: license
+          resolved_license:
+            custom_license: true
+            fsf_libre: true
+            license_id: license_id
+            name: name
+            uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+            osi_approved: true
+          package_metadata:
+            latest_version_published_at: ""
+            latest_version: latest_version
+            resolved_at: ""
+          scope: REQUIRED
+          name: name
+          classifier: classifier
+          hashes:
+            sha1: sha1
+            sha384: sha384
+            sha3_512: sha3_512
+            sha256: sha256
+            sha3_256: sha3_256
+            blake2b_512: blake2b_512
+            sha3_384: sha3_384
+            blake3: blake3
+            sha512: sha512
+            blake2b_256: blake2b_256
+            blake2b_384: blake2b_384
+            md5: md5
+          cpe: cpe
+          last_inherited_risk_score: 6.027456183070403
+          metrics:
+            policy_violations_operational_audited: 3
+            critical: 1
+            findings_unaudited: 1
+            policy_violations_warn: 1
+            policy_violations_security_unaudited: 9
+            findings_total: 4
+            medium: 5
+            unassigned: 7
+            policy_violations_license_total: 6
+            policy_violations_operational_total: 6
+            high: 5
+            policy_violations_operational_unaudited: 6
+            low: 2
+            policy_violations_audited: 1
+            suppressed: 3
+            policy_violations_total: 7
+            policy_violations_security_audited: 9
+            policy_violations_fail: 1
+            policy_violations_license_audited: 8
+            inherited_risk_score: 2.027123023002322
+            findings_audited: 7
+            policy_violations_security_total: 5
+            policy_violations_unaudited: 4
+            vulnerabilities: 9
+            policy_violations_info: 6
+            policy_violations_license_unaudited: 9
+          package_artifact_metadata:
+            resolved_from: resolved_from
+            resolved_at: ""
+            hashes:
+              sha1: sha1
+              sha384: sha384
+              sha3_512: sha3_512
+              sha256: sha256
+              sha3_256: sha3_256
+              blake2b_512: blake2b_512
+              sha3_384: sha3_384
+              blake3: blake3
+              sha512: sha512
+              blake2b_256: blake2b_256
+              blake2b_384: blake2b_384
+              md5: md5
+            published_at: ""
+          license_url: license_url
+          group: group
+          license_expression: license_expression
+        - internal: true
+          copyright: copyright
+          project:
+            name: name
+            version: version
+            uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          purl: purl
+          version: version
+          uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          swid_tag_id: swid_tag_id
+          license: license
+          resolved_license:
+            custom_license: true
+            fsf_libre: true
+            license_id: license_id
+            name: name
+            uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+            osi_approved: true
+          package_metadata:
+            latest_version_published_at: ""
+            latest_version: latest_version
+            resolved_at: ""
+          scope: REQUIRED
+          name: name
+          classifier: classifier
+          hashes:
+            sha1: sha1
+            sha384: sha384
+            sha3_512: sha3_512
+            sha256: sha256
+            sha3_256: sha3_256
+            blake2b_512: blake2b_512
+            sha3_384: sha3_384
+            blake3: blake3
+            sha512: sha512
+            blake2b_256: blake2b_256
+            blake2b_384: blake2b_384
+            md5: md5
+          cpe: cpe
+          last_inherited_risk_score: 6.027456183070403
+          metrics:
+            policy_violations_operational_audited: 3
+            critical: 1
+            findings_unaudited: 1
+            policy_violations_warn: 1
+            policy_violations_security_unaudited: 9
+            findings_total: 4
+            medium: 5
+            unassigned: 7
+            policy_violations_license_total: 6
+            policy_violations_operational_total: 6
+            high: 5
+            policy_violations_operational_unaudited: 6
+            low: 2
+            policy_violations_audited: 1
+            suppressed: 3
+            policy_violations_total: 7
+            policy_violations_security_audited: 9
+            policy_violations_fail: 1
+            policy_violations_license_audited: 8
+            inherited_risk_score: 2.027123023002322
+            findings_audited: 7
+            policy_violations_security_total: 5
+            policy_violations_unaudited: 4
+            vulnerabilities: 9
+            policy_violations_info: 6
+            policy_violations_license_unaudited: 9
+          package_artifact_metadata:
+            resolved_from: resolved_from
+            resolved_at: ""
+            hashes:
+              sha1: sha1
+              sha384: sha384
+              sha3_512: sha3_512
+              sha256: sha256
+              sha3_256: sha3_256
+              blake2b_512: blake2b_512
+              sha3_384: sha3_384
+              blake3: blake3
+              sha512: sha512
+              blake2b_256: blake2b_256
+              blake2b_384: blake2b_384
+              md5: md5
+            published_at: ""
+          license_url: license_url
+          group: group
+          license_expression: license_expression
+      type: object
+    invalid-sort-field-problem-details:
+      allOf:
+      - $ref: "#/components/schemas/problem-details"
+      - properties:
+          invalid_field:
+            description: Name of the field for which sorting is not supported.
+            type: string
+          supported_fields:
+            description: |-
+              Names of fields for which sorting is supported.
+              When empty, sorting is explicitly *not* supported.
+              When absent, sorting may be supported, but no definitive guarantees exist.
+              Consult the operation's description.
+            items:
+              type: string
+            type: array
+        required:
+        - invalid_field
+        type: object
+        example: null
+      type: object
+      example: null
+    problem-details:
+      description: An RFC 9457 problem object.
+      externalDocs:
+        url: https://www.rfc-editor.org/rfc/rfc9457.html
+      properties:
+        type:
+          default: about:blank
+          description: A URI reference that identifies the problem type
+          format: uri-reference
+          type: string
+        status:
+          description: HTTP status code generated by the origin server for this occurrence
+            of the problem
+          example: 500
+          format: int32
+          maximum: 599
+          minimum: 400
+          type: integer
+        title:
+          description: "Short, human-readable summary of the problem type"
+          maxLength: 255
+          type: string
+        detail:
+          description: Human-readable explanation specific to this occurrence of the
+            problem
+          maxLength: 1024
+          type: string
+        instance:
+          description: Reference URI that identifies the specific occurrence of the
+            problem
+          format: uri-reference
+          type: string
+      required:
+      - detail
+      - title
+      - type
+      type: object
+      x-parent: true
+    create-component-request:
+      properties:
+        project_uuid:
+          format: uuid
+          type: string
+        name:
+          maxLength: 255
+          type: string
+        description:
+          maxLength: 255
+          type: string
+        group:
+          maxLength: 255
+          type: string
+        version:
+          maxLength: 255
+          type: string
+        classifier:
+          $ref: "#/components/schemas/classifier"
+        filename:
+          maxLength: 255
+          type: string
+        extension:
+          maxLength: 255
+          type: string
+        hashes:
+          $ref: "#/components/schemas/hashes"
+        cpe:
+          maxLength: 255
+          type: string
+        publisher:
+          maxLength: 255
+          type: string
+        supplier:
+          $ref: "#/components/schemas/organizational-entity"
+        authors:
+          items:
+            $ref: "#/components/schemas/organizational-contact"
+          type: array
+        purl:
+          maxLength: 1024
+          type: string
+        swid_tag_id:
+          maxLength: 255
+          type: string
+        internal:
+          type: boolean
+        copyright:
+          maxLength: 255
+          type: string
+        license:
+          maxLength: 255
+          type: string
+        license_expression:
+          maxLength: 255
+          type: string
+        license_url:
+          maxLength: 255
+          type: string
+        notes:
+          maxLength: 255
+          type: string
+      required:
+      - name
+      - project_uuid
+      type: object
+    invalid-request-problem-details:
+      allOf:
+      - $ref: "#/components/schemas/problem-details"
+      - properties:
+          errors:
+            items:
+              $ref: "#/components/schemas/constraint-violation-error"
+            type: array
+        required:
+        - errors
+        type: object
+        example: null
+      type: object
+      example: null
+    list-extension-points-response:
+      allOf:
+      - $ref: "#/components/schemas/paginated-response"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/list-extension-points-response-item"
+            type: array
+        required:
+        - items
+        type: object
+        example: null
+      example:
+        total:
+          count: 0
+          type: AT_LEAST
+        next_page_token: next_page_token
+        items:
+        - name: name
+        - name: name
+      type: object
+    list-extensions-response:
+      allOf:
+      - $ref: "#/components/schemas/paginated-response"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/list-extensions-response-item"
+            type: array
+        required:
+        - items
+        type: object
+        example: null
+      example:
+        total:
+          count: 0
+          type: AT_LEAST
+        next_page_token: next_page_token
+        items:
+        - testable: true
+          name: name
+          configurable: true
+        - testable: true
+          name: name
+          configurable: true
+      type: object
+    get-extension-config-response:
+      example:
+        config:
+          key: ""
+      properties:
+        config:
+          additionalProperties: true
+          type: object
+      required:
+      - config
+      type: object
+    update-extension-config-request:
+      properties:
+        config:
+          additionalProperties: true
+          type: object
+      required:
+      - config
+      type: object
+    json-schema-validation-problem-details:
+      allOf:
+      - $ref: "#/components/schemas/problem-details"
+      - properties:
+          errors:
+            description: List of JSON Schema validation errors
+            items:
+              $ref: "#/components/schemas/json-schema-validation-error"
+            type: array
+        required:
+        - errors
+        type: object
+        example: null
+      type: object
+      example: null
+    extension-config-schema:
+      additionalProperties: true
+      example:
+        $schema: https://openapi-generator.tech
+      properties:
+        $schema:
+          format: uri
+          type: string
+      required:
+      - $schema
+      type: object
+    test-extension-request:
+      properties:
+        config:
+          additionalProperties: true
+          type: object
+      type: object
+    test-extension-response:
+      example:
+        checks:
+        - name: connection
+          message: Connection failed
+          status: PASSED
+        - name: connection
+          message: Connection failed
+          status: PASSED
+      properties:
+        checks:
+          items:
+            $ref: "#/components/schemas/extension-test-check"
+          type: array
+      required:
+      - checks
+      type: object
+    clone-project-request:
+      properties:
+        version:
+          description: Version of the cloned project.
+          minLength: 1
+          type: string
+        version_is_latest:
+          default: false
+          description: "Whether to mark the cloned project version as latest. If another\
+            \ version is already marked as latest, it will be atomically un-unmarked\
+            \ as part of the cloning operation."
+          type: boolean
+        includes:
+          default: []
+          description: |-
+            List of items to include in the clone:
+
+              * `ACL`: Include portfolio ACL definitions.
+              * `COMPONENTS`: Include components.
+              * `FINDINGS`: Include findings.
+                  * Has no effect unless `COMPONENTS` is also included.
+              * `FINDINGS_AUDIT_HISTORY`: Include audit history of findings.
+                  * Has no effect unless `FINDINGS` is also included.
+              * `POLICY_VIOLATIONS`: Include policy violations.
+                  * Has no effect unless `COMPONENTS` is also included.
+              * `POLICY_VIOLATIONS_AUDIT_HISTORY`: Include audit history of policy violations.
+                  * Has no effect unless `POLICY_VIOLATIONS` is also included.
+              * `PROPERTIES`: Include project properties.
+              * `SERVICES`: Include services.
+              * `TAGS`: Include project tags.
+          items:
+            $ref: "#/components/schemas/clone-project-include"
+          type: array
+          uniqueItems: true
+      required:
+      - version
+      type: object
+    clone-project-response:
+      example:
+        uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+      properties:
+        uuid:
+          description: UUID of the cloned project.
+          format: uuid
+          type: string
+      required:
+      - uuid
+      type: object
+    list-project-components-response:
+      allOf:
+      - $ref: "#/components/schemas/paginated-response"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/list-project-components-response-item"
+            type: array
+        required:
+        - items
+        type: object
+        example: null
+      example:
+        total:
+          count: 0
+          type: AT_LEAST
+        next_page_token: next_page_token
+        items:
+        - internal: true
+          copyright: copyright
+          occurrence_count: 0
+          purl: purl
+          version: version
+          uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          swid_tag_id: swid_tag_id
+          license: license
+          resolved_license:
+            custom_license: true
+            fsf_libre: true
+            license_id: license_id
+            name: name
+            uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+            osi_approved: true
+          package_metadata:
+            latest_version_published_at: ""
+            latest_version: latest_version
+            resolved_at: ""
+          scope: REQUIRED
+          name: name
+          classifier: classifier
+          hashes:
+            sha1: sha1
+            sha384: sha384
+            sha3_512: sha3_512
+            sha256: sha256
+            sha3_256: sha3_256
+            blake2b_512: blake2b_512
+            sha3_384: sha3_384
+            blake3: blake3
+            sha512: sha512
+            blake2b_256: blake2b_256
+            blake2b_384: blake2b_384
+            md5: md5
+          cpe: cpe
+          last_inherited_risk_score: 6.027456183070403
+          metrics:
+            policy_violations_operational_audited: 3
+            critical: 1
+            findings_unaudited: 1
+            policy_violations_warn: 1
+            policy_violations_security_unaudited: 9
+            findings_total: 4
+            medium: 5
+            unassigned: 7
+            policy_violations_license_total: 6
+            policy_violations_operational_total: 6
+            high: 5
+            policy_violations_operational_unaudited: 6
+            low: 2
+            policy_violations_audited: 1
+            suppressed: 3
+            policy_violations_total: 7
+            policy_violations_security_audited: 9
+            policy_violations_fail: 1
+            policy_violations_license_audited: 8
+            inherited_risk_score: 2.027123023002322
+            findings_audited: 7
+            policy_violations_security_total: 5
+            policy_violations_unaudited: 4
+            vulnerabilities: 9
+            policy_violations_info: 6
+            policy_violations_license_unaudited: 9
+          package_artifact_metadata:
+            resolved_from: resolved_from
+            resolved_at: ""
+            hashes:
+              sha1: sha1
+              sha384: sha384
+              sha3_512: sha3_512
+              sha256: sha256
+              sha3_256: sha3_256
+              blake2b_512: blake2b_512
+              sha3_384: sha3_384
+              blake3: blake3
+              sha512: sha512
+              blake2b_256: blake2b_256
+              blake2b_384: blake2b_384
+              md5: md5
+            published_at: ""
+          license_url: license_url
+          group: group
+          license_expression: license_expression
+        - internal: true
+          copyright: copyright
+          occurrence_count: 0
+          purl: purl
+          version: version
+          uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          swid_tag_id: swid_tag_id
+          license: license
+          resolved_license:
+            custom_license: true
+            fsf_libre: true
+            license_id: license_id
+            name: name
+            uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+            osi_approved: true
+          package_metadata:
+            latest_version_published_at: ""
+            latest_version: latest_version
+            resolved_at: ""
+          scope: REQUIRED
+          name: name
+          classifier: classifier
+          hashes:
+            sha1: sha1
+            sha384: sha384
+            sha3_512: sha3_512
+            sha256: sha256
+            sha3_256: sha3_256
+            blake2b_512: blake2b_512
+            sha3_384: sha3_384
+            blake3: blake3
+            sha512: sha512
+            blake2b_256: blake2b_256
+            blake2b_384: blake2b_384
+            md5: md5
+          cpe: cpe
+          last_inherited_risk_score: 6.027456183070403
+          metrics:
+            policy_violations_operational_audited: 3
+            critical: 1
+            findings_unaudited: 1
+            policy_violations_warn: 1
+            policy_violations_security_unaudited: 9
+            findings_total: 4
+            medium: 5
+            unassigned: 7
+            policy_violations_license_total: 6
+            policy_violations_operational_total: 6
+            high: 5
+            policy_violations_operational_unaudited: 6
+            low: 2
+            policy_violations_audited: 1
+            suppressed: 3
+            policy_violations_total: 7
+            policy_violations_security_audited: 9
+            policy_violations_fail: 1
+            policy_violations_license_audited: 8
+            inherited_risk_score: 2.027123023002322
+            findings_audited: 7
+            policy_violations_security_total: 5
+            policy_violations_unaudited: 4
+            vulnerabilities: 9
+            policy_violations_info: 6
+            policy_violations_license_unaudited: 9
+          package_artifact_metadata:
+            resolved_from: resolved_from
+            resolved_at: ""
+            hashes:
+              sha1: sha1
+              sha384: sha384
+              sha3_512: sha3_512
+              sha256: sha256
+              sha3_256: sha3_256
+              blake2b_512: blake2b_512
+              sha3_384: sha3_384
+              blake3: blake3
+              sha512: sha512
+              blake2b_256: blake2b_256
+              blake2b_384: blake2b_384
+              md5: md5
+            published_at: ""
+          license_url: license_url
+          group: group
+          license_expression: license_expression
+      type: object
+    list-secrets-response:
+      allOf:
+      - $ref: "#/components/schemas/paginated-response"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/secret-metadata"
+            type: array
+        required:
+        - items
+        type: object
+        example: null
+      example:
+        total:
+          count: 0
+          type: AT_LEAST
+        next_page_token: next_page_token
+        items:
+        - updated_at: 1752209050377
+          name: MY_SECRET
+          description: description
+          created_at: 1752209050377
+        - updated_at: 1752209050377
+          name: MY_SECRET
+          description: description
+          created_at: 1752209050377
+      type: object
+    create-secret-request:
+      properties:
+        name:
+          example: MY_SECRET
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
+          type: string
+        description:
+          maxLength: 255
+          type: string
+        value:
+          maxLength: 4096
+          minLength: 1
+          type: string
+      required:
+      - name
+      - value
+      type: object
+    secret-name:
+      example: MY_SECRET
+      pattern: "^[a-zA-Z0-9_-]{1,64}$"
+      type: string
+    secret-metadata:
+      example:
+        updated_at: 1752209050377
+        name: MY_SECRET
+        description: description
+        created_at: 1752209050377
+      properties:
+        name:
+          example: MY_SECRET
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
+          type: string
+        description:
+          type: string
+        created_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        updated_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+      required:
+      - name
+      type: object
+    update-secret-request:
+      properties:
+        description:
+          description: The new description. Omit this field to retain the current
+            description.
+          maxLength: 255
+          type: string
+        value:
+          description: The new value. Omit this field to retain the current value.
+          maxLength: 4096
+          minLength: 1
+          type: string
+      type: object
+    list-vuln-policies-response:
+      allOf:
+      - $ref: "#/components/schemas/paginated-response"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/list-vuln-policies-response-item"
+            type: array
+        required:
+        - items
+        type: object
+        example: null
+      example:
+        total:
+          count: 0
+          type: AT_LEAST
+        next_page_token: next_page_token
+        items:
+        - author: author
+          name: name
+          operation_mode: DISABLED
+          description: description
+          source: USER
+          priority: 0
+          uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+        - author: author
+          name: name
+          operation_mode: DISABLED
+          description: description
+          source: USER
+          priority: 0
+          uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+      type: object
+    create-vuln-policy-request:
+      properties:
+        name:
+          maxLength: 255
+          minLength: 1
+          type: string
+        description:
+          maxLength: 512
+          type: string
+        author:
+          maxLength: 255
+          type: string
+        condition:
+          maxLength: 4096
+          minLength: 1
+          type: string
+        analysis:
+          $ref: "#/components/schemas/vuln-policy-analysis"
+        ratings:
+          items:
+            $ref: "#/components/schemas/vuln-policy-rating"
+          maxItems: 3
+          type: array
+        operation_mode:
+          $ref: "#/components/schemas/vuln-policy-operation-mode"
+        priority:
+          default: 0
+          format: int32
+          maximum: 100
+          minimum: 0
+          type: integer
+        valid_from:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        valid_until:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+      required:
+      - analysis
+      - condition
+      - name
+      type: object
+    invalid-vuln-policy-condition-problem-details:
+      allOf:
+      - $ref: "#/components/schemas/problem-details"
+      - properties:
+          errors:
+            items:
+              $ref: "#/components/schemas/vuln-policy-condition-error"
+            type: array
+        required:
+        - errors
+        type: object
+        example: null
+      type: object
+      example: null
+    get-vuln-policy-response:
+      example:
+        author: author
+        created: 1752209050377
+        operation_mode: DISABLED
+        description: description
+        valid_from: 1752209050377
+        source: USER
+        analysis:
+          vendor_response: CAN_NOT_FIX
+          details: details
+          state: EXPLOITABLE
+          justification: CODE_NOT_PRESENT
+          suppress: false
+        priority: 60
+        uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+        condition: condition
+        valid_until: 1752209050377
+        ratings:
+        - severity: CRITICAL
+          score: 0.8008281904610115
+          method: CVSSV2
+          vector: vector
+        - severity: CRITICAL
+          score: 0.8008281904610115
+          method: CVSSV2
+          vector: vector
+        - severity: CRITICAL
+          score: 0.8008281904610115
+          method: CVSSV2
+          vector: vector
+        name: name
+        updated: 1752209050377
+      properties:
+        uuid:
+          format: uuid
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        author:
+          type: string
+        condition:
+          type: string
+        analysis:
+          $ref: "#/components/schemas/vuln-policy-analysis"
+        ratings:
+          items:
+            $ref: "#/components/schemas/vuln-policy-rating"
+          maxItems: 3
+          type: array
+        operation_mode:
+          $ref: "#/components/schemas/vuln-policy-operation-mode"
+        priority:
+          format: int32
+          maximum: 100
+          minimum: 0
+          type: integer
+        source:
+          $ref: "#/components/schemas/vuln-policy-source"
+        valid_from:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        valid_until:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        created:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        updated:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+      required:
+      - analysis
+      - condition
+      - name
+      - operation_mode
+      - priority
+      - source
+      - uuid
+      type: object
+    update-vuln-policy-request:
+      properties:
+        name:
+          maxLength: 255
+          minLength: 1
+          type: string
+        description:
+          maxLength: 512
+          type: string
+        author:
+          maxLength: 255
+          type: string
+        condition:
+          maxLength: 4096
+          minLength: 1
+          type: string
+        analysis:
+          $ref: "#/components/schemas/vuln-policy-analysis"
+        ratings:
+          items:
+            $ref: "#/components/schemas/vuln-policy-rating"
+          maxItems: 3
+          type: array
+        operation_mode:
+          $ref: "#/components/schemas/vuln-policy-operation-mode"
+        priority:
+          default: 0
+          format: int32
+          maximum: 100
+          minimum: 0
+          type: integer
+        valid_from:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        valid_until:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+      required:
+      - analysis
+      - condition
+      - name
+      type: object
+    list-vuln-policy-bundles-response:
+      allOf:
+      - $ref: "#/components/schemas/paginated-response"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/list-vuln-policy-bundles-response-item"
+            type: array
+        required:
+        - items
+        type: object
+        example: null
+      example:
+        total:
+          count: 0
+          type: AT_LEAST
+        next_page_token: next_page_token
+        items:
+        - last_successful_sync: 1752209050377
+          created: 1752209050377
+          uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          updated: 1752209050377
+          url: url
+          hash: hash
+        - last_successful_sync: 1752209050377
+          created: 1752209050377
+          uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          updated: 1752209050377
+          url: url
+          hash: hash
+      type: object
+    vuln-policy-bundle-sync-status:
+      example:
+        completed_at: 1752209050377
+        started_at: 1752209050377
+        failure_reason: failure_reason
+        status: PENDING
+      properties:
+        status:
+          description: Status of the synchronization.
+          enum:
+          - PENDING
+          - RUNNING
+          - COMPLETED
+          - FAILED
+          type: string
+        started_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        completed_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        failure_reason:
+          description: Reason for why the synchronization failed.
+          type: string
+      required:
+      - status
+      type: object
+    vuln-data-source-mirror-status:
+      example:
+        completed_at: 1752209050377
+        started_at: 1752209050377
+        failure_reason: failure_reason
+        status: PENDING
+      properties:
+        status:
+          description: Status of the mirror run.
+          enum:
+          - PENDING
+          - RUNNING
+          - COMPLETED
+          - FAILED
+          type: string
+        started_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        completed_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        failure_reason:
+          description: Reason for why the mirror run failed.
+          type: string
+      required:
+      - status
+      type: object
+    system-capabilities-response:
+      example:
+        capabilities:
+          secret_management:
+            read_only: false
+      properties:
+        capabilities:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+          description: Map of namespaces to capability flags.
+          type: object
+      required:
+      - capabilities
+      type: object
+    task-queue-type:
+      enum:
+      - ACTIVITY
+      - WORKFLOW
+      type: string
+    list-task-queues-response:
+      allOf:
+      - $ref: "#/components/schemas/paginated-response"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/task-queue"
+            type: array
+        required:
+        - items
+        type: object
+        example: null
+      example:
+        total:
+          count: 0
+          type: AT_LEAST
+        next_page_token: next_page_token
+        items:
+        - depth: 0
+          updated_at: 1752209050377
+          name: name
+          created_at: 1752209050377
+          status: ACTIVE
+          capacity: 1
+        - depth: 0
+          updated_at: 1752209050377
+          name: name
+          created_at: 1752209050377
+          status: ACTIVE
+          capacity: 1
+      type: object
+    update-task-queue-request:
+      properties:
+        status:
+          $ref: "#/components/schemas/task-queue-status"
+        capacity:
+          format: int32
+          minimum: 1
+          type: integer
+      type: object
+    workflow-run-metadata:
+      example:
+        workflow_name: workflow_name
+        created_at: 1752209050377
+        task_queue_name: task_queue_name
+        priority: 60
+        labels:
+          key: labels
+        workflow_version: 8
+        workflow_instance_id: workflow_instance_id
+        completed_at: 1752209050377
+        concurrency_key: concurrency_key
+        updated_at: 1752209050377
+        parent_id: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+        started_at: 1752209050377
+        id: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+        status: CREATED
+      properties:
+        id:
+          format: uuid
+          type: string
+        parent_id:
+          format: uuid
+          type: string
+        workflow_name:
+          type: string
+        workflow_version:
+          format: int32
+          maximum: 100
+          minimum: 1
+          type: integer
+        workflow_instance_id:
+          type: string
+        task_queue_name:
+          type: string
+        status:
+          $ref: "#/components/schemas/workflow-run-status"
+        priority:
+          format: int32
+          maximum: 100
+          minimum: 0
+          type: integer
+        concurrency_key:
+          type: string
+        labels:
+          additionalProperties:
+            type: string
+          type: object
+        created_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        updated_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        started_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        completed_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+      required:
+      - created_at
+      - id
+      - priority
+      - status
+      - task_queue_name
+      - workflow_name
+      - workflow_version
+      type: object
+    workflow-run-status:
+      enum:
+      - CREATED
+      - RUNNING
+      - SUSPENDED
+      - FAILED
+      - COMPLETED
+      - CANCELLED
+      type: string
+    list-workflow-runs-response:
+      allOf:
+      - $ref: "#/components/schemas/paginated-response"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/workflow-run-metadata"
+            type: array
+        required:
+        - items
+        type: object
+        example: null
+      example:
+        total:
+          count: 0
+          type: AT_LEAST
+        next_page_token: next_page_token
+        items:
+        - workflow_name: workflow_name
+          created_at: 1752209050377
+          task_queue_name: task_queue_name
+          priority: 60
+          labels:
+            key: labels
+          workflow_version: 8
+          workflow_instance_id: workflow_instance_id
+          completed_at: 1752209050377
+          concurrency_key: concurrency_key
+          updated_at: 1752209050377
+          parent_id: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          started_at: 1752209050377
+          id: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          status: CREATED
+        - workflow_name: workflow_name
+          created_at: 1752209050377
+          task_queue_name: task_queue_name
+          priority: 60
+          labels:
+            key: labels
+          workflow_version: 8
+          workflow_instance_id: workflow_instance_id
+          completed_at: 1752209050377
+          concurrency_key: concurrency_key
+          updated_at: 1752209050377
+          parent_id: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          started_at: 1752209050377
+          id: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          status: CREATED
+      type: object
+    list-workflow-run-events-response:
+      allOf:
+      - $ref: "#/components/schemas/paginated-response"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/list-workflow-run-events-response-item"
+            type: array
+        required:
+        - items
+        type: object
+        example: null
+      example:
+        total:
+          count: 0
+          type: AT_LEAST
+        next_page_token: next_page_token
+        items:
+        - sequence_number: 0
+          event:
+            key: ""
+        - sequence_number: 0
+          event:
+            key: ""
+      type: object
+    paginated-response:
+      properties:
+        next_page_token:
+          description: Token to retrieve the next page. Absent when no more items
+            exist.
+          type: string
+        total:
+          $ref: "#/components/schemas/total-count"
+      required:
+      - total
+      type: object
+      x-parent: true
+    list-components-response-item:
+      example:
+        internal: true
+        copyright: copyright
+        project:
+          name: name
+          version: version
+          uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+        purl: purl
+        version: version
+        uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+        swid_tag_id: swid_tag_id
+        license: license
+        resolved_license:
+          custom_license: true
+          fsf_libre: true
+          license_id: license_id
+          name: name
+          uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          osi_approved: true
+        package_metadata:
+          latest_version_published_at: ""
+          latest_version: latest_version
+          resolved_at: ""
+        scope: REQUIRED
+        name: name
+        classifier: classifier
+        hashes:
+          sha1: sha1
+          sha384: sha384
+          sha3_512: sha3_512
+          sha256: sha256
+          sha3_256: sha3_256
+          blake2b_512: blake2b_512
+          sha3_384: sha3_384
+          blake3: blake3
+          sha512: sha512
+          blake2b_256: blake2b_256
+          blake2b_384: blake2b_384
+          md5: md5
+        cpe: cpe
+        last_inherited_risk_score: 6.027456183070403
+        metrics:
+          policy_violations_operational_audited: 3
+          critical: 1
+          findings_unaudited: 1
+          policy_violations_warn: 1
+          policy_violations_security_unaudited: 9
+          findings_total: 4
+          medium: 5
+          unassigned: 7
+          policy_violations_license_total: 6
+          policy_violations_operational_total: 6
+          high: 5
+          policy_violations_operational_unaudited: 6
+          low: 2
+          policy_violations_audited: 1
+          suppressed: 3
+          policy_violations_total: 7
+          policy_violations_security_audited: 9
+          policy_violations_fail: 1
+          policy_violations_license_audited: 8
+          inherited_risk_score: 2.027123023002322
+          findings_audited: 7
+          policy_violations_security_total: 5
+          policy_violations_unaudited: 4
+          vulnerabilities: 9
+          policy_violations_info: 6
+          policy_violations_license_unaudited: 9
+        package_artifact_metadata:
+          resolved_from: resolved_from
+          resolved_at: ""
+          hashes:
+            sha1: sha1
+            sha384: sha384
+            sha3_512: sha3_512
+            sha256: sha256
+            sha3_256: sha3_256
+            blake2b_512: blake2b_512
+            sha3_384: sha3_384
+            blake3: blake3
+            sha512: sha512
+            blake2b_256: blake2b_256
+            blake2b_384: blake2b_384
+            md5: md5
+          published_at: ""
+        license_url: license_url
+        group: group
+        license_expression: license_expression
+      properties:
+        name:
+          maxLength: 255
+          type: string
+        version:
+          maxLength: 255
+          type: string
+        group:
+          maxLength: 255
+          type: string
+        classifier:
+          maxLength: 255
+          type: string
+        scope:
+          $ref: "#/components/schemas/scope"
+        hashes:
+          $ref: "#/components/schemas/hashes"
+        cpe:
+          maxLength: 255
+          type: string
+        purl:
+          maxLength: 1024
+          type: string
+        swid_tag_id:
+          maxLength: 255
+          type: string
+        internal:
+          type: boolean
+        copyright:
+          maxLength: 255
+          type: string
+        license:
+          maxLength: 255
+          type: string
+        license_expression:
+          maxLength: 255
+          type: string
+        license_url:
+          maxLength: 255
+          type: string
+        resolved_license:
+          $ref: "#/components/schemas/license"
+        last_inherited_risk_score:
+          format: double
+          type: number
+        uuid:
+          format: uuid
+          type: string
+        project:
+          $ref: "#/components/schemas/component-project"
+        metrics:
+          $ref: "#/components/schemas/dependency-metrics"
+        package_metadata:
+          $ref: "#/components/schemas/package-metadata"
+        package_artifact_metadata:
+          $ref: "#/components/schemas/package-artifact-metadata"
+      required:
+      - name
+      - uuid
+      type: object
+    classifier:
+      enum:
+      - APPLICATION
+      - FRAMEWORK
+      - LIBRARY
+      - CONTAINER
+      - OPERATING_SYSTEM
+      - DEVICE
+      - FIRMWARE
+      - FILE
+      - PLATFORM
+      - DEVICE_DRIVER
+      - MACHINE_LEARNING_MODEL
+      - DATA
+      - CRYPTOGRAPHIC_ASSET
+      type: string
+    hashes:
+      example:
+        sha1: sha1
+        sha384: sha384
+        sha3_512: sha3_512
+        sha256: sha256
+        sha3_256: sha3_256
+        blake2b_512: blake2b_512
+        sha3_384: sha3_384
+        blake3: blake3
+        sha512: sha512
+        blake2b_256: blake2b_256
+        blake2b_384: blake2b_384
+        md5: md5
+      properties:
+        sha1:
+          maxLength: 40
+          type: string
+        sha256:
+          maxLength: 64
+          type: string
+        sha384:
+          maxLength: 96
+          type: string
+        sha512:
+          maxLength: 128
+          type: string
+        sha3_256:
+          maxLength: 64
+          type: string
+        sha3_384:
+          maxLength: 96
+          type: string
+        sha3_512:
+          maxLength: 128
+          type: string
+        blake2b_256:
+          maxLength: 64
+          type: string
+        blake2b_384:
+          maxLength: 96
+          type: string
+        blake2b_512:
+          maxLength: 128
+          type: string
+        blake3:
+          maxLength: 255
+          type: string
+        md5:
+          maxLength: 32
+          type: string
+      type: object
+    organizational-entity:
+      properties:
+        name:
+          description: Name of the organizational entity
+          maxLength: 255
+          type: string
+        urls:
+          items:
+            maxLength: 255
+            type: string
+          type: array
+        contacts:
+          items:
+            $ref: "#/components/schemas/organizational-contact"
+          type: array
+      type: object
+    organizational-contact:
+      properties:
+        name:
+          description: Name of the organizational contact
+          maxLength: 255
+          type: string
+        email:
+          description: Email of the organizational contact
+          maxLength: 255
+          type: string
+        phone:
+          description: Phone of the organizational contact
+          maxLength: 255
+          type: string
+      type: object
+    constraint-violation-error:
+      properties:
+        path:
+          description: Path to the invalid field in the request
+          type: string
+        value:
+          description: The invalid value
+          type: string
+        message:
+          description: Message explaining the error
+          type: string
+      required:
+      - message
+      type: object
+    list-extension-points-response-item:
+      example:
+        name: name
+      properties:
+        name:
+          type: string
+      required:
+      - name
+      type: object
+    list-extensions-response-item:
+      example:
+        testable: true
+        name: name
+        configurable: true
+      properties:
+        name:
+          type: string
+        configurable:
+          description: Whether the extension supports runtime configuration.
+          type: boolean
+        testable:
+          description: Whether the extension can be tested.
+          type: boolean
+      required:
+      - configurable
+      - name
+      - testable
+      type: object
+    json-schema-validation-error:
+      description: |-
+        A JSON Schema validation error as per
+        <https://json-schema.org/draft/2020-12/json-schema-core.html#name-output-structure>.
+      properties:
+        instance_location:
+          description: JSON Pointer to the location in the instance that failed validation
+          example: /config/port
+          type: string
+        evaluation_path:
+          description: JSON Pointer to the location in the schema during evaluation
+          example: /properties/config/properties/port
+          type: string
+        schema_location:
+          description: Schema location that generated the error
+          example: https://example.com/schemas/config#/properties/config/properties/port
+          type: string
+        keyword:
+          description: The validation keyword that failed
+          example: type
+          type: string
+        message:
+          description: Human-readable error message
+          example: Value must be a number
+          type: string
+      required:
+      - instance_location
+      - message
+      type: object
+    extension-test-check:
+      example:
+        name: connection
+        message: Connection failed
+        status: PASSED
+      properties:
+        name:
+          example: connection
+          type: string
+        status:
+          $ref: "#/components/schemas/extension-test-check-status"
+        message:
+          example: Connection failed
+          type: string
+      required:
+      - name
+      - status
+      type: object
+    clone-project-include:
+      enum:
+      - ACL
+      - COMPONENTS
+      - FINDINGS
+      - FINDINGS_AUDIT_HISTORY
+      - POLICY_VIOLATIONS
+      - POLICY_VIOLATIONS_AUDIT_HISTORY
+      - PROPERTIES
+      - SERVICES
+      - TAGS
+      type: string
+    list-project-components-response-item:
+      example:
+        internal: true
+        copyright: copyright
+        occurrence_count: 0
+        purl: purl
+        version: version
+        uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+        swid_tag_id: swid_tag_id
+        license: license
+        resolved_license:
+          custom_license: true
+          fsf_libre: true
+          license_id: license_id
+          name: name
+          uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+          osi_approved: true
+        package_metadata:
+          latest_version_published_at: ""
+          latest_version: latest_version
+          resolved_at: ""
+        scope: REQUIRED
+        name: name
+        classifier: classifier
+        hashes:
+          sha1: sha1
+          sha384: sha384
+          sha3_512: sha3_512
+          sha256: sha256
+          sha3_256: sha3_256
+          blake2b_512: blake2b_512
+          sha3_384: sha3_384
+          blake3: blake3
+          sha512: sha512
+          blake2b_256: blake2b_256
+          blake2b_384: blake2b_384
+          md5: md5
+        cpe: cpe
+        last_inherited_risk_score: 6.027456183070403
+        metrics:
+          policy_violations_operational_audited: 3
+          critical: 1
+          findings_unaudited: 1
+          policy_violations_warn: 1
+          policy_violations_security_unaudited: 9
+          findings_total: 4
+          medium: 5
+          unassigned: 7
+          policy_violations_license_total: 6
+          policy_violations_operational_total: 6
+          high: 5
+          policy_violations_operational_unaudited: 6
+          low: 2
+          policy_violations_audited: 1
+          suppressed: 3
+          policy_violations_total: 7
+          policy_violations_security_audited: 9
+          policy_violations_fail: 1
+          policy_violations_license_audited: 8
+          inherited_risk_score: 2.027123023002322
+          findings_audited: 7
+          policy_violations_security_total: 5
+          policy_violations_unaudited: 4
+          vulnerabilities: 9
+          policy_violations_info: 6
+          policy_violations_license_unaudited: 9
+        package_artifact_metadata:
+          resolved_from: resolved_from
+          resolved_at: ""
+          hashes:
+            sha1: sha1
+            sha384: sha384
+            sha3_512: sha3_512
+            sha256: sha256
+            sha3_256: sha3_256
+            blake2b_512: blake2b_512
+            sha3_384: sha3_384
+            blake3: blake3
+            sha512: sha512
+            blake2b_256: blake2b_256
+            blake2b_384: blake2b_384
+            md5: md5
+          published_at: ""
+        license_url: license_url
+        group: group
+        license_expression: license_expression
+      properties:
+        name:
+          maxLength: 255
+          type: string
+        version:
+          maxLength: 255
+          type: string
+        group:
+          maxLength: 255
+          type: string
+        classifier:
+          maxLength: 255
+          type: string
+        hashes:
+          $ref: "#/components/schemas/hashes"
+        cpe:
+          maxLength: 255
+          type: string
+        purl:
+          maxLength: 1024
+          type: string
+        swid_tag_id:
+          maxLength: 255
+          type: string
+        internal:
+          type: boolean
+        copyright:
+          maxLength: 255
+          type: string
+        license:
+          maxLength: 255
+          type: string
+        license_expression:
+          maxLength: 255
+          type: string
+        license_url:
+          maxLength: 255
+          type: string
+        resolved_license:
+          $ref: "#/components/schemas/license"
+        occurrence_count:
+          format: int64
+          minimum: 0
+          type: integer
+        scope:
+          $ref: "#/components/schemas/scope"
+        last_inherited_risk_score:
+          format: double
+          type: number
+        uuid:
+          format: uuid
+          type: string
+        metrics:
+          $ref: "#/components/schemas/dependency-metrics"
+        package_metadata:
+          $ref: "#/components/schemas/package-metadata"
+        package_artifact_metadata:
+          $ref: "#/components/schemas/package-artifact-metadata"
+      required:
+      - name
+      - uuid
+      type: object
+    list-vuln-policies-response-item:
+      example:
+        author: author
+        name: name
+        operation_mode: DISABLED
+        description: description
+        source: USER
+        priority: 0
+        uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+      properties:
+        uuid:
+          format: uuid
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        author:
+          type: string
+        priority:
+          format: int32
+          type: integer
+        operation_mode:
+          $ref: "#/components/schemas/vuln-policy-operation-mode"
+        source:
+          $ref: "#/components/schemas/vuln-policy-source"
+      required:
+      - name
+      - operation_mode
+      - priority
+      - source
+      - uuid
+      type: object
+    vuln-policy-analysis:
+      example:
+        vendor_response: CAN_NOT_FIX
+        details: details
+        state: EXPLOITABLE
+        justification: CODE_NOT_PRESENT
+        suppress: false
+      properties:
+        state:
+          enum:
+          - EXPLOITABLE
+          - IN_TRIAGE
+          - FALSE_POSITIVE
+          - NOT_AFFECTED
+          - RESOLVED
+          type: string
+        justification:
+          enum:
+          - CODE_NOT_PRESENT
+          - CODE_NOT_REACHABLE
+          - REQUIRES_CONFIGURATION
+          - REQUIRES_DEPENDENCY
+          - REQUIRES_ENVIRONMENT
+          - PROTECTED_BY_COMPILER
+          - PROTECTED_AT_RUNTIME
+          - PROTECTED_AT_PERIMETER
+          - PROTECTED_BY_MITIGATING_CONTROL
+          type: string
+        vendor_response:
+          enum:
+          - CAN_NOT_FIX
+          - WILL_NOT_FIX
+          - UPDATE
+          - ROLLBACK
+          - WORKAROUND_AVAILABLE
+          type: string
+        details:
+          type: string
+        suppress:
+          default: false
+          type: boolean
+      required:
+      - state
+      type: object
+    vuln-policy-rating:
+      example:
+        severity: CRITICAL
+        score: 0.8008281904610115
+        method: CVSSV2
+        vector: vector
+      properties:
+        method:
+          enum:
+          - CVSSV2
+          - CVSSV3
+          - CVSSV4
+          - OWASP
+          type: string
+        severity:
+          enum:
+          - CRITICAL
+          - HIGH
+          - MEDIUM
+          - LOW
+          - INFO
+          type: string
+        vector:
+          type: string
+        score:
+          format: double
+          type: number
+      required:
+      - method
+      - severity
+      type: object
+    vuln-policy-operation-mode:
+      enum:
+      - DISABLED
+      - APPLY
+      - LOG
+      type: string
+    vuln-policy-condition-error:
+      properties:
+        line:
+          description: Line number where the error occurred
+          format: int32
+          type: integer
+        column:
+          description: Column number where the error occurred
+          format: int32
+          type: integer
+        message:
+          description: Description of the error
+          type: string
+      required:
+      - column
+      - line
+      - message
+      type: object
+    vuln-policy-source:
+      enum:
+      - USER
+      - BUNDLE
+      type: string
+    list-vuln-policy-bundles-response-item:
+      example:
+        last_successful_sync: 1752209050377
+        created: 1752209050377
+        uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+        updated: 1752209050377
+        url: url
+        hash: hash
+      properties:
+        uuid:
+          format: uuid
+          type: string
+        url:
+          type: string
+        hash:
+          type: string
+        last_successful_sync:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        created:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        updated:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+      required:
+      - url
+      - uuid
+      type: object
+    task-queue:
+      example:
+        depth: 0
+        updated_at: 1752209050377
+        name: name
+        created_at: 1752209050377
+        status: ACTIVE
+        capacity: 1
+      properties:
+        name:
+          type: string
+        status:
+          $ref: "#/components/schemas/task-queue-status"
+        capacity:
+          format: int32
+          minimum: 1
+          type: integer
+        depth:
+          format: int32
+          minimum: 0
+          type: integer
+        created_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+        updated_at:
+          description: "Epoch timestamp in milliseconds since January 1, 1970 UTC."
+          example: 1752209050377
+          format: int64
+          type: integer
+      required:
+      - capacity
+      - created_at
+      - depth
+      - name
+      - status
+      type: object
+    task-queue-status:
+      enum:
+      - ACTIVE
+      - PAUSED
+      type: string
+    list-workflow-run-events-response-item:
+      example:
+        sequence_number: 0
+        event:
+          key: ""
+      properties:
+        sequence_number:
+          format: int32
+          type: integer
+        event:
+          additionalProperties: true
+          type: object
+      required:
+      - event
+      - sequence_number
+      type: object
+    total-count:
+      example:
+        count: 0
+        type: AT_LEAST
+      properties:
+        count:
+          description: "The total number of records across all pages. Might be an\
+            \ exact count, or a lower bound. Refer to the `type` field for the applicable\
+            \ semantics."
+          format: int64
+          minimum: 0
+          type: integer
+        type:
+          $ref: "#/components/schemas/total-count-type"
+      required:
+      - count
+      - type
+      type: object
+    scope:
+      enum:
+      - REQUIRED
+      - OPTIONAL
+      - EXCLUDED
+      type: string
+    license:
+      example:
+        custom_license: true
+        fsf_libre: true
+        license_id: license_id
+        name: name
+        uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+        osi_approved: true
+      properties:
+        name:
+          maxLength: 255
+          type: string
+        license_id:
+          maxLength: 255
+          type: string
+        uuid:
+          format: uuid
+          type: string
+        osi_approved:
+          type: boolean
+        fsf_libre:
+          type: boolean
+        custom_license:
+          type: boolean
+      type: object
+    component-project:
+      example:
+        name: name
+        version: version
+        uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+      properties:
+        name:
+          maxLength: 255
+          type: string
+        version:
+          maxLength: 255
+          type: string
+        uuid:
+          format: uuid
+          type: string
+      type: object
+    dependency-metrics:
+      example:
+        policy_violations_operational_audited: 3
+        critical: 1
+        findings_unaudited: 1
+        policy_violations_warn: 1
+        policy_violations_security_unaudited: 9
+        findings_total: 4
+        medium: 5
+        unassigned: 7
+        policy_violations_license_total: 6
+        policy_violations_operational_total: 6
+        high: 5
+        policy_violations_operational_unaudited: 6
+        low: 2
+        policy_violations_audited: 1
+        suppressed: 3
+        policy_violations_total: 7
+        policy_violations_security_audited: 9
+        policy_violations_fail: 1
+        policy_violations_license_audited: 8
+        inherited_risk_score: 2.027123023002322
+        findings_audited: 7
+        policy_violations_security_total: 5
+        policy_violations_unaudited: 4
+        vulnerabilities: 9
+        policy_violations_info: 6
+        policy_violations_license_unaudited: 9
+      properties:
+        critical:
+          format: int32
+          type: integer
+        high:
+          format: int32
+          type: integer
+        medium:
+          format: int32
+          type: integer
+        low:
+          format: int32
+          type: integer
+        unassigned:
+          format: int32
+          type: integer
+        vulnerabilities:
+          format: int32
+          type: integer
+        suppressed:
+          format: int32
+          type: integer
+        inherited_risk_score:
+          format: double
+          type: number
+        findings_total:
+          format: int32
+          type: integer
+        findings_audited:
+          format: int32
+          type: integer
+        findings_unaudited:
+          format: int32
+          type: integer
+        policy_violations_fail:
+          format: int32
+          type: integer
+        policy_violations_warn:
+          format: int32
+          type: integer
+        policy_violations_info:
+          format: int32
+          type: integer
+        policy_violations_total:
+          format: int32
+          type: integer
+        policy_violations_audited:
+          format: int32
+          type: integer
+        policy_violations_unaudited:
+          format: int32
+          type: integer
+        policy_violations_security_total:
+          format: int32
+          type: integer
+        policy_violations_security_audited:
+          format: int32
+          type: integer
+        policy_violations_security_unaudited:
+          format: int32
+          type: integer
+        policy_violations_license_total:
+          format: int32
+          type: integer
+        policy_violations_license_audited:
+          format: int32
+          type: integer
+        policy_violations_license_unaudited:
+          format: int32
+          type: integer
+        policy_violations_operational_total:
+          format: int32
+          type: integer
+        policy_violations_operational_audited:
+          format: int32
+          type: integer
+        policy_violations_operational_unaudited:
+          format: int32
+          type: integer
+      type: object
+    package-metadata:
+      description: |
+        Latest version information from configured package registries. Only present when the component has a PURL with a type supported by at least one configured repository, and metadata has been successfully resolved from an upstream repository. Metadata resolution is asynchronous and runs in the background after a component is created or updated. This field may be absent for recently created components until resolution completes.
+      example:
+        latest_version_published_at: ""
+        latest_version: latest_version
+        resolved_at: ""
+      properties:
+        latest_version:
+          description: |
+            Latest known version in the configured registries. Null when the resolver ran but returned no version.
+          nullable: true
+          type: string
+        latest_version_published_at:
+          allOf:
+          - $ref: "#/components/schemas/timestamp"
+          description: |
+            When the latest version was published. May be null even when latest_version is non-null, as some registries do not report publication dates.
+          nullable: true
+        resolved_at:
+          allOf:
+          - $ref: "#/components/schemas/timestamp"
+          description: When package metadata was last resolved from the upstream repository.
+      required:
+      - resolved_at
+      type: object
+    package-artifact-metadata:
+      description: |
+        Artifact-level metadata for the component's exact version from configured package repositories. Only present when the component has a PURL with a version, the PURL type is supported by at least one configured repository, and artifact metadata has been successfully resolved from an upstream repository. Metadata resolution is asynchronous and runs in the background after a component is created or updated. This field may be absent for recently created components until resolution completes.
+      example:
+        resolved_from: resolved_from
+        resolved_at: ""
+        hashes:
+          sha1: sha1
+          sha384: sha384
+          sha3_512: sha3_512
+          sha256: sha256
+          sha3_256: sha3_256
+          blake2b_512: blake2b_512
+          sha3_384: sha3_384
+          blake3: blake3
+          sha512: sha512
+          blake2b_256: blake2b_256
+          blake2b_384: blake2b_384
+          md5: md5
+        published_at: ""
+      properties:
+        hashes:
+          $ref: "#/components/schemas/hashes"
+        published_at:
+          allOf:
+          - $ref: "#/components/schemas/timestamp"
+          description: When this artifact was published to the repository.
+          nullable: true
+        resolved_from:
+          description: Identifier of the repository from which artifact metadata was
+            fetched.
+          nullable: true
+          type: string
+        resolved_at:
+          allOf:
+          - $ref: "#/components/schemas/timestamp"
+          description: When artifact metadata was last resolved from the upstream
+            repository.
+          nullable: true
+      type: object
+    extension-test-check-status:
+      enum:
+      - PASSED
+      - FAILED
+      - SKIPPED
+      type: string
+    total-count-type:
+      enum:
+      - AT_LEAST
+      - EXACT
+      type: string
+    listComponents_400_response:
+      anyOf:
+      - $ref: "#/components/schemas/invalid-sort-field-problem-details"
+      - $ref: "#/components/schemas/problem-details"
+    createComponent_400_response:
+      anyOf:
+      - $ref: "#/components/schemas/invalid-request-problem-details"
+      - $ref: "#/components/schemas/problem-details"
+    updateExtensionConfig_400_response:
+      anyOf:
+      - $ref: "#/components/schemas/json-schema-validation-problem-details"
+      - $ref: "#/components/schemas/problem-details"
+    createVulnPolicy_201_response:
+      example:
+        uuid: 046b6c7f-0b8a-43b9-b35d-6489e6daee91
+      properties:
+        uuid:
+          format: uuid
+          type: string
+      required:
+      - uuid
+      type: object
+    createVulnPolicy_400_response:
+      anyOf:
+      - $ref: "#/components/schemas/invalid-vuln-policy-condition-problem-details"
+      - $ref: "#/components/schemas/invalid-request-problem-details"
+      - $ref: "#/components/schemas/problem-details"
+    listWorkflowRuns_400_response:
+      anyOf:
+      - $ref: "#/components/schemas/invalid-request-problem-details"
+      - $ref: "#/components/schemas/invalid-sort-field-problem-details"
+      - $ref: "#/components/schemas/problem-details"
+  securitySchemes:
+    apiKeyAuth:
+      description: Authentication via API key.
+      in: header
+      name: X-Api-Key
+      type: apiKey
+    bearerAuth:
+      bearerFormat: Opaque
+      description: |-
+        Authentication via opaque server-issued session token.
+        Tokens are obtained from `POST /api/v1/user/login` or
+        `POST /api/v1/user/oidc/login`.
+      scheme: bearer
+      type: http

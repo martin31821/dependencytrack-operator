@@ -4,7 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**Dn** | **string** |  | 
+**Dn** | Pointer to **string** |  | [optional] 
 **Email** | Pointer to **string** |  | [optional] 
 **Permissions** | Pointer to [**[]Permission**](Permission.md) |  | [optional] 
 **Username** | **string** |  | 
@@ -13,7 +13,7 @@ Name | Type | Description | Notes
 
 ### NewLdapUser
 
-`func NewLdapUser(dn string, username string, ) *LdapUser`
+`func NewLdapUser(username string, ) *LdapUser`
 
 NewLdapUser instantiates a new LdapUser object
 This constructor will assign default values to properties that have it defined,
@@ -47,6 +47,11 @@ and a boolean to check if the value has been set.
 
 SetDn sets Dn field to given value.
 
+### HasDn
+
+`func (o *LdapUser) HasDn() bool`
+
+HasDn returns a boolean if a field has been set.
 
 ### GetEmail
 

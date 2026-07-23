@@ -5,9 +5,9 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Comment** | Pointer to **string** |  | [optional] 
-**Created** | Pointer to **util.DTTime** |  | [optional] 
+**Created** | Pointer to **int64** | UNIX epoch timestamp in milliseconds | [optional] 
 **Key** | Pointer to **string** |  | [optional] 
-**LastUsed** | Pointer to **util.DTTime** |  | [optional] 
+**LastUsed** | Pointer to **int64** | UNIX epoch timestamp in milliseconds | [optional] 
 **Legacy** | Pointer to **bool** |  | [optional] 
 **MaskedKey** | Pointer to **string** |  | [optional] 
 **PublicId** | Pointer to **string** |  | [optional] 
@@ -58,20 +58,20 @@ HasComment returns a boolean if a field has been set.
 
 ### GetCreated
 
-`func (o *ApiKey) GetCreated() util.DTTime`
+`func (o *ApiKey) GetCreated() int64`
 
 GetCreated returns the Created field if non-nil, zero value otherwise.
 
 ### GetCreatedOk
 
-`func (o *ApiKey) GetCreatedOk() (*util.DTTime, bool)`
+`func (o *ApiKey) GetCreatedOk() (*int64, bool)`
 
 GetCreatedOk returns a tuple with the Created field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetCreated
 
-`func (o *ApiKey) SetCreated(v util.DTTime)`
+`func (o *ApiKey) SetCreated(v int64)`
 
 SetCreated sets Created field to given value.
 
@@ -108,20 +108,20 @@ HasKey returns a boolean if a field has been set.
 
 ### GetLastUsed
 
-`func (o *ApiKey) GetLastUsed() util.DTTime`
+`func (o *ApiKey) GetLastUsed() int64`
 
 GetLastUsed returns the LastUsed field if non-nil, zero value otherwise.
 
 ### GetLastUsedOk
 
-`func (o *ApiKey) GetLastUsedOk() (*util.DTTime, bool)`
+`func (o *ApiKey) GetLastUsedOk() (*int64, bool)`
 
 GetLastUsedOk returns a tuple with the LastUsed field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetLastUsed
 
-`func (o *ApiKey) SetLastUsed(v util.DTTime)`
+`func (o *ApiKey) SetLastUsed(v int64)`
 
 SetLastUsed sets LastUsed field to given value.
 

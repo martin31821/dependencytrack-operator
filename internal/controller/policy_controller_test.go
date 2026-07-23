@@ -72,6 +72,12 @@ func (p *mockClientProvider) Get(ctx context.Context) (context.Context, *dtapi.A
 	return context.WithValue(ctx, dtapi.ContextAccessToken, "mock-token"), p.api, nil
 }
 
+func (p *mockClientProvider) Invalidate() {
+	p.mu.Lock()
+	p.api = nil
+	p.mu.Unlock()
+}
+
 // --- httptest-based mock server for DependencyTrack API ---
 
 type mockDTServer struct {

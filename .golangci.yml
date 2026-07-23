@@ -26,8 +26,20 @@ linters:
       rules:
         - name: comment-spacings
         - name: import-shadowing
+    goconst:
+      min-len: 10
+      min-occurrences: 10
+    dupl:
+      threshold: 3000
+    gocyclo:
+      min-complexity: 60
   exclusions:
     generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - gen/.*$
     rules:
       - linters:
           - lll
@@ -36,10 +48,23 @@ linters:
           - dupl
           - lll
         path: internal/*
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+      - linters:
+          - errcheck
+          - ineffassign
+          - prealloc
+          - unparam
+          - goconst
+          - gocyclo
+          - staticcheck
+          - lll
+        path: ".*_test\\.go"
+      - linters:
+          - errcheck
+          - goconst
+          - prealloc
+          - revive
+          - unparam
+        path: ".*test_helpers\\.go"
 formatters:
   enable:
     - gofmt
@@ -50,3 +75,4 @@ formatters:
       - third_party$
       - builtin$
       - examples$
+      - gen/.*$

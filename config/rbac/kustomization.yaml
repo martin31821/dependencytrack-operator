@@ -31,4 +31,10 @@ resources:
 - policy_admin_role.yaml
 - policy_editor_role.yaml
 - policy_viewer_role.yaml
+- notificationpublisher_admin_role.yaml
+- notificationpublisher_editor_role.yaml
+- notificationpublisher_viewer_role.yaml
+- notificationrule_admin_role.yaml
+- notificationrule_editor_role.yaml
+- notificationrule_viewer_role.yaml
 

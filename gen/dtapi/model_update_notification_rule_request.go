@@ -21,19 +21,21 @@ var _ MappedNullable = &UpdateNotificationRuleRequest{}
 
 // UpdateNotificationRuleRequest struct for UpdateNotificationRuleRequest
 type UpdateNotificationRuleRequest struct {
-	Enabled               *bool    `json:"enabled,omitempty"`
-	FilterExpression      *string  `json:"filterExpression,omitempty"`
-	Level                 string   `json:"level"`
-	LogSuccessfulPublish  *bool    `json:"logSuccessfulPublish,omitempty"`
-	Name                  string   `json:"name"`
-	NotifyChildren        *bool    `json:"notifyChildren,omitempty"`
-	NotifyOn              []string `json:"notifyOn,omitempty"`
-	PublisherConfig       *string  `json:"publisherConfig,omitempty"`
-	ScheduleCron          *string  `json:"scheduleCron,omitempty"`
-	ScheduleSkipUnchanged *bool    `json:"scheduleSkipUnchanged,omitempty"`
-	Scope                 string   `json:"scope"`
-	Tags                  []Tag    `json:"tags,omitempty"`
-	Uuid                  string   `json:"uuid"`
+	Enabled               *bool     `json:"enabled,omitempty"`
+	FilterExpression      *string   `json:"filterExpression,omitempty"`
+	Level                 string    `json:"level"`
+	LogSuccessfulPublish  *bool     `json:"logSuccessfulPublish,omitempty"`
+	Name                  string    `json:"name"`
+	NotifyChildren        *bool     `json:"notifyChildren,omitempty"`
+	NotifyOn              []string  `json:"notifyOn,omitempty"`
+	PublisherConfig       *string   `json:"publisherConfig,omitempty"`
+	ScheduleCron          *string   `json:"scheduleCron,omitempty"`
+	ScheduleSkipUnchanged *bool     `json:"scheduleSkipUnchanged,omitempty"`
+	Scope                 string    `json:"scope"`
+	Tags                  []Tag     `json:"tags,omitempty"`
+	Teams                 []Team    `json:"teams,omitempty"`
+	Projects              []Project `json:"projects,omitempty"`
+	Uuid                  string    `json:"uuid"`
 }
 
 type _UpdateNotificationRuleRequest UpdateNotificationRuleRequest
@@ -482,6 +484,12 @@ func (o UpdateNotificationRuleRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize["scope"] = o.Scope
 	if !IsNil(o.Tags) {
 		toSerialize["tags"] = o.Tags
+	}
+	if !IsNil(o.Teams) {
+		toSerialize["teams"] = o.Teams
+	}
+	if !IsNil(o.Projects) {
+		toSerialize["projects"] = o.Projects
 	}
 	toSerialize["uuid"] = o.Uuid
 	return toSerialize, nil
