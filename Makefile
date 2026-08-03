@@ -208,7 +208,9 @@ CHART_DIR ?= deploy/charts/dependencytrack-operator
 .PHONY: helm-chart
 helm-chart: manifests ## Generate a Helm chart from kustomize output.
 	mkdir -p $(CHART_DIR)
-	./hack/kustomize-build-with-image.sh "$(IMG)" | helmify $(CHART_DIR) 2>/dev/null
+	./hack/kustomize-build-with-image.sh "$(IMG)" | helmify -crd-dir $(CHART_DIR) 2>/dev/null
+	@# CRDs now live in crds/; purge any stale *-crd.yaml left by prior non-crd-dir generations.
+	@rm -f $(CHART_DIR)/templates/*-crd.yaml
 	@# Remove duplicate hardcoded selector/template labels that conflict with helpers
 	@sed -i '/matchLabels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' $(CHART_DIR)/templates/deployment.yaml
 	@sed -i '/labels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' $(CHART_DIR)/templates/deployment.yaml

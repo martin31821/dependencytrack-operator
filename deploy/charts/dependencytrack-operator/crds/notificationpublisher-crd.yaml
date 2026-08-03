@@ -1,28 +1,30 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: teams.dependencytrack.mko.dev
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  labels:
-  {{- include "dependencytrack-operator.labels" . | nindent 4 }}
+  name: notificationpublishers.dependencytrack.mko.dev
 spec:
   group: dependencytrack.mko.dev
   names:
-    kind: Team
-    listKind: TeamList
-    plural: teams
-    singular: team
+    kind: NotificationPublisher
+    listKind: NotificationPublisherList
+    plural: notificationpublishers
+    singular: notificationpublisher
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.uuid
       name: UUID
       type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Team is the Schema for the teams API.
+        description: NotificationPublisher is the Schema for the notificationpublishers
+          API.
         properties:
           apiVersion:
             description: |-
@@ -42,27 +44,32 @@ spec:
           metadata:
             type: object
           spec:
-            description: TeamSpec defines the desired state of Team.
+            description: NotificationPublisherSpec defines the desired state of NotificationPublisher.
             properties:
-              name:
-                description: Name of the team to create.
+              description:
+                description: Description is an optional human-readable description
+                  of the publisher.
+                maxLength: 1024
                 type: string
-              permissions:
+              extensionName:
                 description: |-
-                  Permissions is an ordered list of permission names to assign to this team.
-                  Valid permission names include: PORTFOLIO_MANAGEMENT,
-                  VIEW_VULNERABILITY, VULNERABILITY_ANALYSIS, BOM_UPLOAD, PROJECT_CREATION,
-                  PROJECT_CREATION_UPLOAD, SYSTEM_CONFIGURATION, ACCESS_MANAGEMENT,
-                  VIEW_PORTFOLIO, PROJECT_READ, VULNERABILITY_ASSESSMENT, and others
-                  specific to the DependencyTrack version in use.
-                  Omit to leave existing permissions unchanged; pass an empty array to
-                  clear all permissions.
-                items:
-                  type: string
-                type: array
+                  ExtensionName identifies the Dependency-Track publisher extension.
+                  Valid values include: email, slack, webhook, opsgenie, and others
+                  supported by the installed DT plugins.
+                minLength: 1
+                type: string
+              name:
+                description: Name is the display name for this publisher in Dependency-Track.
+                maxLength: 255
+                minLength: 1
+                type: string
+            required:
+            - extensionName
+            - name
             type: object
           status:
-            description: TeamStatus defines the observed state of Team.
+            description: NotificationPublisherStatus defines the observed state of
+              NotificationPublisher.
             properties:
               conditions:
                 description: Conditions reflect the current reconciliation state.
@@ -124,14 +131,14 @@ spec:
               name:
                 description: Name records the name that was last synced to DependencyTrack.
                 type: string
-              permissions:
+              observedGeneration:
                 description: |-
-                  Permissions tracks the permissions last synced to DependencyTrack.
-                  This is used for status-only observability; the controller reconciles
-                  the actual permission set each reconciliation cycle.
-                type: string
+                  ObservedGeneration reflects the most recent metadata.Generation
+                  observed by the reconciler.
+                format: int64
+                type: integer
               uuid:
-                description: UUID is the actual UUID of the team in dependencytrack.
+                description: UUID is the actual UUID of the publisher in DependencyTrack.
                 type: string
             type: object
         type: object
@@ -139,9 +146,4 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
+

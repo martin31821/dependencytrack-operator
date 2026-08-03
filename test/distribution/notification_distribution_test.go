@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestNotificationPublisherCRDDistribution(t *testing.T) {
 	root := findProjectRoot(t)
 
 	kustomizeCRDPath := filepath.Join(root, "config", "crd", "bases", "dependencytrack.mko.dev_notificationpublishers.yaml")
-	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "notificationpublisher-crd.yaml")
+	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "crds", "notificationpublisher-crd.yaml")
 
 	// Verify both files exist
 	if _, err := os.Stat(kustomizeCRDPath); os.IsNotExist(err) {
@@ -164,7 +165,7 @@ func TestNotificationRuleCRDDistribution(t *testing.T) {
 	root := findProjectRoot(t)
 
 	kustomizeCRDPath := filepath.Join(root, "config", "crd", "bases", "dependencytrack.mko.dev_notificationrules.yaml")
-	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "notificationrule-crd.yaml")
+	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "crds", "notificationrule-crd.yaml")
 
 	// Verify both files exist
 	if _, err := os.Stat(kustomizeCRDPath); os.IsNotExist(err) {
@@ -586,7 +587,7 @@ func TestManagerRBACIncludesNotificationResources(t *testing.T) {
 // CRD schema has the required fields and types that match the Go types.
 func TestNotificationPublisherCRDSchemaIntegrity(t *testing.T) {
 	root := findProjectRoot(t)
-	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "notificationpublisher-crd.yaml")
+	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "crds", "notificationpublisher-crd.yaml")
 
 	var doc map[string]interface{}
 	if err := parseHelmYAML(helmCRDPath, &doc); err != nil {
@@ -648,7 +649,7 @@ func TestNotificationPublisherCRDSchemaIntegrity(t *testing.T) {
 // schema has the required fields and types that match the Go types.
 func TestNotificationRuleCRDSchemaIntegrity(t *testing.T) {
 	root := findProjectRoot(t)
-	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "notificationrule-crd.yaml")
+	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "crds", "notificationrule-crd.yaml")
 
 	var doc map[string]interface{}
 	if err := parseHelmYAML(helmCRDPath, &doc); err != nil {
@@ -704,6 +705,8 @@ func TestNotificationRuleCRDSchemaIntegrity(t *testing.T) {
 	scopeProps := getNestedMap(specProps, "properties", "scope")
 	scopeEnum := getStringSlice(scopeProps, "enum")
 	expectedScopes := []string{"PORTFOLIO", "SYSTEM"}
+	sort.Strings(scopeEnum)
+	sort.Strings(expectedScopes)
 	if len(scopeEnum) != len(expectedScopes) {
 		t.Errorf("spec.scope enum=%v, expected %v", scopeEnum, expectedScopes)
 	} else {
@@ -820,7 +823,7 @@ func TestNotificationCRDProjectMetadataMatchesScope(t *testing.T) {
 // CRDs are present in the Helm chart templates.
 func TestAllNotificationCRDsDistributed(t *testing.T) {
 	root := findProjectRoot(t)
-	chartTemplates := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates")
+	chartTemplates := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "crds")
 
 	expectedCRDs := []string{
 		"notificationpublisher-crd.yaml",

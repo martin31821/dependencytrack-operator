@@ -1,18 +1,16 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: notificationpublishers.dependencytrack.mko.dev
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  labels:
-  {{- include "dependencytrack-operator.labels" . | nindent 4 }}
+  name: policies.dependencytrack.mko.dev
 spec:
   group: dependencytrack.mko.dev
   names:
-    kind: NotificationPublisher
-    listKind: NotificationPublisherList
-    plural: notificationpublishers
-    singular: notificationpublisher
+    kind: Policy
+    listKind: PolicyList
+    plural: policies
+    singular: policy
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -26,7 +24,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          NotificationPublisher is the Schema for the notificationpublishers API.
+          Policy is the Schema for the policies API.
+          Policy resources are namespaced and manage DependencyTrack policies.
         properties:
           apiVersion:
             description: |-
@@ -46,32 +45,91 @@ spec:
           metadata:
             type: object
           spec:
-            description: NotificationPublisherSpec defines the desired state of NotificationPublisher.
+            description: PolicySpec defines the desired state of Policy.
             properties:
-              description:
-                description: Description is an optional human-readable description
-                  of the publisher.
-                maxLength: 1024
-                type: string
-              extensionName:
+              conditions:
                 description: |-
-                  ExtensionName identifies the Dependency-Track publisher extension.
-                  Valid values include: email, slack, webhook, opsgenie, and others
-                  supported by the installed DT plugins.
-                minLength: 1
-                type: string
+                  Conditions is the list of inline conditions that must be evaluated.
+                  At least one condition must be provided.
+                items:
+                  description: PolicyCondition defines a single condition within a
+                    Policy.
+                  properties:
+                    operator:
+                      description: Operator specifies whether the subject is or is
+                        not the configured value.
+                      enum:
+                      - IS
+                      - IS_NOT
+                      - MATCHES
+                      - NO_MATCH
+                      - NUMERIC_GREATER_THAN
+                      - NUMERIC_LESS_THAN
+                      - NUMERIC_EQUAL
+                      - NUMERIC_NOT_EQUAL
+                      - NUMERIC_GREATER_THAN_OR_EQUAL
+                      - NUMERIC_LESSER_THAN_OR_EQUAL
+                      - CONTAINS_ALL
+                      - CONTAINS_ANY
+                      type: string
+                    subject:
+                      description: Subject specifies the Dependency-Track property
+                        to evaluate.
+                      enum:
+                      - AGE
+                      - COORDINATES
+                      - CPE
+                      - EXPRESSION
+                      - LICENSE
+                      - LICENSE_GROUP
+                      - PACKAGE_URL
+                      - SEVERITY
+                      - SWID_TAGID
+                      - VERSION
+                      - COMPONENT_HASH
+                      - CWE
+                      - VULNERABILITY_ID
+                      - VERSION_DISTANCE
+                      - EPSS
+                      type: string
+                    value:
+                      description: Value is the value compared against the subject.
+                      type: string
+                  required:
+                  - operator
+                  - subject
+                  - value
+                  type: object
+                minItems: 1
+                type: array
               name:
-                description: Name is the display name for this publisher in Dependency-Track.
+                description: Name is the human-readable name of the policy.
                 maxLength: 255
                 minLength: 1
                 type: string
+              operator:
+                description: Operator defines whether any or all policy conditions
+                  must match.
+                enum:
+                - ANY
+                - ALL
+                type: string
+              violationState:
+                description: ViolationState defines the severity assigned when policy
+                  conditions are violated.
+                enum:
+                - INFO
+                - WARN
+                - FAIL
+                type: string
             required:
-            - extensionName
+            - conditions
             - name
+            - operator
+            - violationState
             type: object
           status:
-            description: NotificationPublisherStatus defines the observed state of
-              NotificationPublisher.
+            description: PolicyStatus defines the observed state of Policy.
             properties:
               conditions:
                 description: Conditions reflect the current reconciliation state.
@@ -133,14 +191,8 @@ spec:
               name:
                 description: Name records the name that was last synced to DependencyTrack.
                 type: string
-              observedGeneration:
-                description: |-
-                  ObservedGeneration reflects the most recent metadata.Generation
-                  observed by the reconciler.
-                format: int64
-                type: integer
               uuid:
-                description: UUID is the actual UUID of the publisher in DependencyTrack.
+                description: UUID is the actual UUID of the policy in DependencyTrack.
                 type: string
             type: object
         type: object
@@ -148,9 +200,4 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
+

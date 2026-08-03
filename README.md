@@ -281,6 +281,71 @@ running `make helm-chart` again. The chart templates are auto-generated — any
 manual changes to `deploy/charts/dependencytrack-operator` will be overwritten on regeneration. Preserve
 custom values in `values.yaml` overrides or apply them via `helm install --values`.
 
+### Updating CRDs (Upgrade Guide)
+
+The CRDs are **generated into a `crds/` directory**
+(`deploy/charts/dependencytrack-operator/crds/{team,policy,apikey,notificationpublisher,notificationrule}-crd.yaml`)
+rather than into `templates/`, via `helmify -crd-dir` in the `helm-chart`
+Makefile target. Per Helm best practice, files in `crds/` are installed once
+(on `helm install`) and are **never** reconciled by `helm upgrade` nor deleted
+by `helm uninstall`. The canonical source of truth remains `config/crd/bases/`
+(all five CRD bases are registered in `config/crd/kustomization.yaml`); the
+chart is reproduced from it by `make helm-chart`.
+
+#### Procedure
+
+1. Edit the desired CRD definition in `config/crd/bases/`.
+   Definitions originate from the `// +kubebuilder:object:root=true` types in
+   `api/v1alpha1/*_types.go`; regenerate rather than hand-editing:
+   ```sh
+   make manifests              # refreshes config/crd/bases via controller-gen
+   make helm-chart IMG=<your-registry>/deptrack-operator:<tag>   # writes crds/*-crd.yaml
+   ```
+2. **(Recommended)** Back up existing CRs before the schema widens, so a
+   tighter schema cannot strand live data:
+   ```sh
+   for c in teams policies apikeys notificationpublishers notificationrules; do
+     kubectl get "$c.dependencytrack.mko.dev" -A \
+       -o yaml > "backup-$c-$(date +%F).yaml"
+   done
+   ```
+3. Apply the **updated CRDs first**, ahead of the operator image. Because
+   `crds/` is ignored by `helm upgrade`, you must apply them out of band.
+   An older controller against a newly-tightened schema can silently drop
+   unknown fields; a brand-new controller against a stale CRD skips new
+   validation. Wait for each CRD's `Established` condition before cutting over:
+   ```sh
+   kubectl apply -f deploy/charts/dependencytrack-operator/crds/
+   ```
+4. Roll the operator Deployment:
+   ```sh
+   helm upgrade my-dependencytrack-operator \
+     ./deploy/charts/dependencytrack-operator \
+     --set controllerManager.manager.image.tag=<tag> --reuse-values
+   kubectl -n deptrack-operator-system rollout status \
+     deploy/deptrack-operator-controller-manager
+   ```
+
+#### Things that break silent upgrades
+
+- **Removing required fields** that existing CRs populate flips the CRD to
+  `Accepted=False` ("field is required"). Strip the field from offending CRs
+  first, or re-add it before deprecating.
+- **Changing `spec.versions`.** Deprecating a version requires migrating every
+  stored object away from it first, then patching `status.storedVersions`.
+- **Structural-schema pruning** drops unknown fields unless
+  `x-kubernetes-preserve-unknown-fields: true`. Stick to additive-only edits.
+
+#### Verify
+
+```sh
+kubectl get crd policies.dependencytrack.mko.dev \
+  -o jsonpath='{.status.conditions[*].type}={.status.conditions[*].status}{"\n"}'
+kubectl -n deptrack-operator-system get pods
+kubectl describe policy/<sample>   # observe a fresh status.conditions stamp
+kubectl logs deploy/deptrack-operator-controller-manager --tail=50
+```
+
 ### Environment variables
 
 The operator container requires these environment variables:

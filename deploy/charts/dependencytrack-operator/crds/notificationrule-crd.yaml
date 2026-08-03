@@ -1,11 +1,9 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: notificationrules.dependencytrack.mko.dev
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  labels:
-  {{- include "dependencytrack-operator.labels" . | nindent 4 }}
+  name: notificationrules.dependencytrack.mko.dev
 spec:
   group: dependencytrack.mko.dev
   names:
@@ -25,8 +23,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: |-
-          NotificationRule is the Schema for the notificationrules API.
+        description: NotificationRule is the Schema for the notificationrules API.
         properties:
           apiVersion:
             description: |-
@@ -63,7 +60,6 @@ spec:
                 - INFORMATIONAL
                 - WARNING
                 - ERROR
-                
                 type: string
               logSuccessfulPublish:
                 description: |-
@@ -84,18 +80,44 @@ spec:
               notifyChildren:
                 description: |-
                   NotifyChildren controls whether the rule also applies to child projects.
-                  Only meaningful when scope is ALL_PROJECTS or SAME_AS_RULE.
+                  Only meaningful when scope is PORTFOLIO or SYSTEM.
                 type: boolean
               notifyOn:
                 description: NotifyOn lists event types that trigger the rule (e.g.
                   NEW_VULNERABILITY).
                 items:
+                  description: |-
+                    NotificationRuleTriggerEvent defines valid notification event types
+                    (NotificationGroup values) accepted by Dependency-Track v5.0.2.
+                  enum:
+                  - NEW_VULNERABILITIES_SUMMARY
+                  - NEW_POLICY_VIOLATIONS_SUMMARY
+                  - BOM_VALIDATION_FAILED
+                  - USER_DELETED
+                  - ANALYZER
+                  - BOM_CONSUMED
+                  - DATASOURCE_MIRRORING
+                  - BOM_PROCESSING_FAILED
+                  - BOM_PROCESSED
+                  - FILE_SYSTEM
+                  - INTEGRATION
+                  - CONFIGURATION
+                  - VEX_PROCESSED
+                  - PROJECT_AUDIT_CHANGE
+                  - VULNERABILITY_RETRACTED
+                  - VEX_CONSUMED
+                  - NEW_VULNERABLE_DEPENDENCY
+                  - REPOSITORY
+                  - USER_CREATED
+                  - POLICY_VIOLATION
+                  - NEW_VULNERABILITY
+                  - PROJECT_CREATED
                   type: string
                 type: array
               projects:
                 description: |-
                   Projects lists project UUIDs to associate with this rule when
-                  scope is SELECTED_PROJECTS. For ALL_PROJECTS or SAME_AS_RULE scopes,
+                  scope is PORTFOLIO. For PORTFOLIO or SYSTEM scopes,
                   the controller ignores this field.
                 items:
                   type: string
@@ -133,7 +155,7 @@ spec:
               scheduleCron:
                 description: |-
                   ScheduleCron is a cron expression that defines when the scheduled rule
-                  fires. Only applicable when triggerType is SCHEDULED. Must not be set
+                  fires. Only applicable when triggerType is SCHEDULE. Must not be set
                   for rules with triggerType EVENT.
                 maxLength: 256
                 type: string
@@ -141,14 +163,13 @@ spec:
                 description: |-
                   ScheduleSkipUnchanged controls whether the scheduled rule skips emitting
                   a notification if the result is unchanged since the last emission.
-                  Only applicable when triggerType is SCHEDULED.
+                  Only applicable when triggerType is SCHEDULE.
                 type: boolean
               scope:
                 description: Scope controls which projects the rule applies to.
                 enum:
-                - PORTFOLIO
                 - SYSTEM
-                
+                - PORTFOLIO
                 type: string
               teams:
                 description: |-
@@ -173,8 +194,7 @@ spec:
             - triggerType
             type: object
           status:
-            description: NotificationRuleStatus defines the observed state of
-              NotificationRule.
+            description: NotificationRuleStatus defines the observed state of NotificationRule.
             properties:
               conditions:
                 description: Conditions reflect the current reconciliation state.
@@ -251,9 +271,4 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
+

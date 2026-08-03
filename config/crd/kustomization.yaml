@@ -5,6 +5,8 @@ resources:
 - bases/dependencytrack.mko.dev_teams.yaml
 - bases/dependencytrack.mko.dev_apikeys.yaml
 - bases/dependencytrack.mko.dev_policies.yaml
+- bases/dependencytrack.mko.dev_notificationpublishers.yaml
+- bases/dependencytrack.mko.dev_notificationrules.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

@@ -68,7 +68,7 @@ func TestPolicyCRDDistribution(t *testing.T) {
 	root := findProjectRoot(t)
 
 	kustomizeCRDPath := filepath.Join(root, "config", "crd", "bases", "dependencytrack.mko.dev_policies.yaml")
-	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "policy-crd.yaml")
+	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "crds", "policy-crd.yaml")
 
 	// Verify both files exist
 	if _, err := os.Stat(kustomizeCRDPath); os.IsNotExist(err) {
@@ -454,7 +454,7 @@ func TestManagerRBACIncludesPolicy(t *testing.T) {
 // and types that match the Go types.
 func TestPolicyCRDSchemaIntegrity(t *testing.T) {
 	root := findProjectRoot(t)
-	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "policy-crd.yaml")
+	helmCRDPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "crds", "policy-crd.yaml")
 
 	var doc map[string]interface{}
 	if err := parseHelmYAML(helmCRDPath, &doc); err != nil {
@@ -560,7 +560,7 @@ func TestPolicyCRDSchemaIntegrity(t *testing.T) {
 // are present in the Helm chart templates.
 func TestAllCRDsDistributed(t *testing.T) {
 	root := findProjectRoot(t)
-	chartTemplates := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates")
+	chartTemplates := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "crds")
 
 	expectedCRDs := []string{
 		"apikey-crd.yaml",
