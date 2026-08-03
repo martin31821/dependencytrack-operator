@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/martin31821/dependencytrack-operator/internal/deptrack"
+	"github.com/martin31821/dependencytrack-operator/internal/dependencytrack"
 )
 
 const (
@@ -51,7 +51,7 @@ type PasswordRotationRunnable struct {
 	Namespace string
 	// ClientProvider, if set, is invalidated after rotation so controllers
 	// re-authenticate with the new password on their next reconciliation.
-	ClientProvider deptrack.ClientProviderInterface
+	ClientProvider dependencytrack.ClientProviderInterface
 }
 
 func (r *PasswordRotationRunnable) NeedLeaderElection() bool { return true }
@@ -96,7 +96,7 @@ func (r *PasswordRotationRunnable) Start(ctx context.Context) error {
 	password := string(secret.Data[secretKeyPassword])
 	pendingPassword := string(secret.Data[secretKeyPasswordNew])
 
-	apiClient := deptrack.NewAPIClient(deptrackURL)
+	apiClient := dependencytrack.NewAPIClient(deptrackURL)
 
 	// Crash recovery: if password-new exists a previous rotation was interrupted.
 	// Try the pending password against DependencyTrack first.

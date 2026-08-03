@@ -41,7 +41,7 @@ import (
 	dependencytrackv1alpha1 "github.com/martin31821/dependencytrack-operator/api/v1alpha1"
 	"github.com/martin31821/dependencytrack-operator/internal/auth"
 	"github.com/martin31821/dependencytrack-operator/internal/controller"
-	"github.com/martin31821/dependencytrack-operator/internal/deptrack"
+	"github.com/martin31821/dependencytrack-operator/internal/dependencytrack"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -218,7 +218,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	dtProvider := &deptrack.ClientProvider{
+	dtProvider := &dependencytrack.ClientProvider{
 		K8sClient:  mgr.GetClient(),
 		Namespace:  namespace,
 		SecretName: credentialsSecret,

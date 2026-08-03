@@ -39,12 +39,12 @@ import (
 
 	dependencytrackv1alpha1 "github.com/martin31821/dependencytrack-operator/api/v1alpha1"
 	"github.com/martin31821/dependencytrack-operator/gen/dtapi"
-	"github.com/martin31821/dependencytrack-operator/internal/deptrack"
+	"github.com/martin31821/dependencytrack-operator/internal/dependencytrack"
 )
 
 // ---- notification-pkg-level mocks (namespaced to avoid collision with policy_controller_test.go) ----
 
-// notificationMockClientProvider implements deptrack.ClientProviderInterface without needing a K8s client.
+// notificationMockClientProvider implements dependencytrack.ClientProviderInterface without needing a K8s client.
 type notificationMockClientProvider struct {
 	url    string
 	mu     sync.Mutex
@@ -61,7 +61,7 @@ func (p *notificationMockClientProvider) Get(ctx context.Context) (context.Conte
 	}
 
 	if p.api == nil {
-		p.api = deptrack.NewAPIClient(p.url)
+		p.api = dependencytrack.NewAPIClient(p.url)
 	}
 	return context.WithValue(ctx, dtapi.ContextAccessToken, "mock-token"), p.api, nil
 }

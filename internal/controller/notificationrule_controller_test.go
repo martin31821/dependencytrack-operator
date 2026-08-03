@@ -38,7 +38,7 @@ import (
 
 	dependencytrackv1alpha1 "github.com/martin31821/dependencytrack-operator/api/v1alpha1"
 	"github.com/martin31821/dependencytrack-operator/gen/dtapi"
-	"github.com/martin31821/dependencytrack-operator/internal/deptrack"
+	"github.com/martin31821/dependencytrack-operator/internal/dependencytrack"
 )
 
 const (
@@ -49,7 +49,7 @@ const (
 	schemaPathSuffix  = "/configSchema"
 )
 
-// notificationRuleMockClientProvider implements deptrack.ClientProviderInterface.
+// notificationRuleMockClientProvider implements dependencytrack.ClientProviderInterface.
 type notificationRuleMockClientProvider struct {
 	url    string
 	mu     sync.Mutex
@@ -64,7 +64,7 @@ func (p *notificationRuleMockClientProvider) Get(ctx context.Context) (context.C
 		return nil, nil, p.getErr
 	}
 	if p.api == nil {
-		p.api = deptrack.NewAPIClient(p.url)
+		p.api = dependencytrack.NewAPIClient(p.url)
 	}
 	return context.WithValue(ctx, dtapi.ContextAccessToken, "mock-token"), p.api, nil
 }

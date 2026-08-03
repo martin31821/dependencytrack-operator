@@ -34,7 +34,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	dependencytrackv1alpha1 "github.com/martin31821/dependencytrack-operator/api/v1alpha1"
-	"github.com/martin31821/dependencytrack-operator/internal/deptrack"
+	"github.com/martin31821/dependencytrack-operator/internal/dependencytrack"
 )
 
 const (
@@ -48,7 +48,7 @@ type APIKeyReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
 	Recorder   record.EventRecorder
-	DTProvider *deptrack.ClientProvider
+	DTProvider *dependencytrack.ClientProvider
 }
 
 // +kubebuilder:rbac:groups=dependencytrack.mko.dev,resources=apikeys,verbs=get;list;watch;create;update;patch;delete

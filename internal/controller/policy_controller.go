@@ -34,7 +34,7 @@ import (
 
 	dependencytrackv1alpha1 "github.com/martin31821/dependencytrack-operator/api/v1alpha1"
 	"github.com/martin31821/dependencytrack-operator/gen/dtapi"
-	"github.com/martin31821/dependencytrack-operator/internal/deptrack"
+	"github.com/martin31821/dependencytrack-operator/internal/dependencytrack"
 )
 
 const (
@@ -57,7 +57,7 @@ type PolicyReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
 	Recorder   record.EventRecorder
-	DTProvider deptrack.ClientProviderInterface
+	DTProvider dependencytrack.ClientProviderInterface
 }
 
 // +kubebuilder:rbac:groups=dependencytrack.mko.dev,resources=policies,verbs=get;list;watch;create;update;patch;delete
