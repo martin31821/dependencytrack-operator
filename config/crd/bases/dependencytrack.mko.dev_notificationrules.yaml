@@ -67,12 +67,6 @@ spec:
                   LogSuccessfulPublish, when true, enables logging for successful
                   notification publishes. When false or omitted, only failures are logged.
                 type: boolean
-              message:
-                description: |-
-                  Message is an optional custom notification message template.
-                  Allowed characters: whitespace, Unicode letters, numbers, and punctuation.
-                maxLength: 4096
-                type: string
               name:
                 description: Name is the display name for this rule in Dependency-Track.
                 maxLength: 255

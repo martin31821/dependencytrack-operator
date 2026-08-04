@@ -308,7 +308,6 @@ func TestNotificationRuleDeepCopy_RoutingFields(t *testing.T) {
 			NotifyOn:              []NotificationRuleTriggerEvent{NotificationRuleTriggerEventNewVulnerability},
 			FilterExpression:      "severity >= HIGH",
 			LogSuccessfulPublish:  &logSuccess,
-			Message:               "Alert: {{ .Vulnerability.FixTitle }}",
 			NotifyChildren:        &notifyChildren,
 			ScheduleCron:          "0 0 * * *",
 			ScheduleSkipUnchanged: &skipUnchanged,
@@ -340,9 +339,6 @@ func TestNotificationRuleDeepCopy_RoutingFields(t *testing.T) {
 	} else if *copied.Spec.LogSuccessfulPublish != *orig.Spec.LogSuccessfulPublish {
 		t.Errorf("LogSuccessfulPublish mismatch: got %v, want %v",
 			*copied.Spec.LogSuccessfulPublish, *orig.Spec.LogSuccessfulPublish)
-	}
-	if copied.Spec.Message != orig.Spec.Message {
-		t.Errorf("Message mismatch: got %q, want %q", copied.Spec.Message, orig.Spec.Message)
 	}
 	if copied.Spec.NotifyChildren == nil {
 		t.Error("NotifyChildren was nil in copy")

@@ -39,6 +39,23 @@ type NotificationPublisherSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxLength=1024
 	Description string `json:"description,omitempty"`
+
+	// Template is an optional custom notification message template that the
+	// publisher applies when delivering notifications. When omitted,
+	// Dependency-Track applies the publisher extension's default template.
+	// This is the supported mechanism for supplying a bespoke notification
+	// body; unlike the legacy per-rule "message" field, it is unconstrained
+	// in length and survives beyond Dependency-Track v5.0.2.
+	// +kubebuilder:validation:Optional
+	Template *string `json:"template,omitempty"`
+
+	// TemplateMimeType declares the media type of the Template body
+	// (e.g. "text/plain", "text/html", "application/json"). When omitted,
+	// Dependency-Track applies the publisher extension's default mime type.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=255
+	TemplateMimeType *string `json:"templateMimeType,omitempty"`
 }
 
 // NotificationPublisherStatus defines the observed state of NotificationPublisher.

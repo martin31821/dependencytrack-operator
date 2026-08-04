@@ -171,6 +171,12 @@ func (s *notificationMockDTServer) handleCreateFromBody(w http.ResponseWriter, r
 	if req.Description != nil {
 		pub.Description = req.Description
 	}
+	if req.Template != nil {
+		pub.Template = req.Template
+	}
+	if req.TemplateMimeType != nil {
+		pub.TemplateMimeType = req.TemplateMimeType
+	}
 	s.publisher = pub
 	s.publishers[pub.Uuid] = pub
 	writeJSON(w, pub)
@@ -201,6 +207,12 @@ func (s *notificationMockDTServer) handleUpdateFromBody(w http.ResponseWriter, r
 	pub.ExtensionName = req.ExtensionName
 	if req.Description != nil {
 		pub.Description = req.Description
+	}
+	if req.Template != nil {
+		pub.Template = req.Template
+	}
+	if req.TemplateMimeType != nil {
+		pub.TemplateMimeType = req.TemplateMimeType
 	}
 	// Always sync the single-slot publisher when the UUID matches,
 	// even if we found it in the map.
@@ -827,6 +839,75 @@ var _ = Describe("NotificationPublisher Controller", func() {
 			np := &dependencytrackv1alpha1.NotificationPublisher{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: publisherNS}, np)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		})
+	})
+
+	// ---- Template & TemplateMimeType ----
+
+	Context("When a publisher specifies a template and templateMimeType", func() {
+		const name = "tmpl-publisher"
+		BeforeEach(func() {
+			p := createNPWithFinalizer(name, publisherNS)
+			large := strings.Repeat("x", 5000) // deliberately exceeds the legacy 4096-char rule "message" cap
+			p.Spec.Template = &large
+			p.Spec.TemplateMimeType = strPtr("text/plain")
+			Expect(k8sClient.Create(ctx, p)).To(Succeed())
+			DeferCleanup(deleteNP, name, publisherNS)
+		})
+		It("should forward template and templateMimeType on create", func() {
+			_, err := ctrl.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: publisherNS}})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = ctrl.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: publisherNS}})
+			Expect(err).NotTo(HaveOccurred())
+			p := &dependencytrackv1alpha1.NotificationPublisher{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: publisherNS}, p)).To(Succeed())
+			Expect(p.Status.UUID).To(Equal("pub-created-uuid-123"))
+			Expect(mockServer.lastCreateRequest).NotTo(BeNil())
+			Expect(mockServer.lastCreateRequest.Template).NotTo(BeNil())
+			Expect(*mockServer.lastCreateRequest.Template).To(HaveLen(5000))
+			Expect(*mockServer.lastCreateRequest.TemplateMimeType).To(Equal("text/plain"))
+			cond := meta.FindStatusCondition(p.Status.Conditions, conditionReady)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		})
+	})
+
+	Context("When a publisher template drifts from the remote value", func() {
+		const name = "tmpl-drift-publisher"
+		BeforeEach(func() {
+			mockServer.mu.Lock()
+			mockServer.publisher = &dtapi.NotificationPublisher{
+				Name:             name + "-ext",
+				ExtensionName:    "slack",
+				Uuid:             "tmpl-drift-uuid",
+				Template:         strPtr("old-template"),
+				TemplateMimeType: strPtr("text/html"),
+			}
+			mockServer.publishers["tmpl-drift-uuid"] = mockServer.publisher
+			mockServer.mu.Unlock()
+			p := createNPWithFinalizer(name, publisherNS)
+			newLarge := strings.Repeat("y", 5000)
+			p.Spec.ExtensionName = "slack"
+			p.Spec.Template = &newLarge
+			p.Spec.TemplateMimeType = strPtr("application/json")
+			Expect(k8sClient.Create(ctx, p)).To(Succeed())
+			DeferCleanup(deleteNP, name, publisherNS)
+			setNPUUID(name, publisherNS, "tmpl-drift-uuid")
+		})
+		It("should push the new template and mime type to DT", func() {
+			_, err := ctrl.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: publisherNS}})
+			Expect(err).NotTo(HaveOccurred())
+			p := &dependencytrackv1alpha1.NotificationPublisher{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: publisherNS}, p)).To(Succeed())
+			Expect(p.Status.UUID).To(Equal("tmpl-drift-uuid"))
+			cond := meta.FindStatusCondition(p.Status.Conditions, conditionReady)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+			mockServer.mu.Lock()
+			defer mockServer.mu.Unlock()
+			Expect(mockServer.publisher.Template).NotTo(BeNil())
+			Expect(*mockServer.publisher.Template).To(HaveLen(5000))
+			Expect(*mockServer.publisher.TemplateMimeType).To(Equal("application/json"))
 		})
 	})
 

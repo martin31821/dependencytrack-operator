@@ -64,6 +64,23 @@ spec:
                 maxLength: 255
                 minLength: 1
                 type: string
+              template:
+                description: |-
+                  Template is an optional custom notification message template that the
+                  publisher applies when delivering notifications. When omitted,
+                  Dependency-Track applies the publisher extension's default template.
+                  This is the supported mechanism for supplying a bespoke notification
+                  body; unlike the legacy per-rule "message" field, it is unconstrained
+                  in length and survives beyond Dependency-Track v5.0.2.
+                type: string
+              templateMimeType:
+                description: |-
+                  TemplateMimeType declares the media type of the Template body
+                  (e.g. "text/plain", "text/html", "application/json"). When omitted,
+                  Dependency-Track applies the publisher extension's default mime type.
+                maxLength: 255
+                minLength: 1
+                type: string
             required:
             - extensionName
             - name

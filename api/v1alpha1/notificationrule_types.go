@@ -144,12 +144,6 @@ type NotificationRuleSpec struct {
 	// +kubebuilder:validation:Optional
 	LogSuccessfulPublish *bool `json:"logSuccessfulPublish,omitempty"`
 
-	// Message is an optional custom notification message template.
-	// Allowed characters: whitespace, Unicode letters, numbers, and punctuation.
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:MaxLength=4096
-	Message string `json:"message,omitempty"`
-
 	// NotifyChildren controls whether the rule also applies to child projects.
 	// Only meaningful when scope is PORTFOLIO or SYSTEM.
 	// +kubebuilder:validation:Optional

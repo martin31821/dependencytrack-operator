@@ -117,7 +117,15 @@ func (r *NotificationPublisherReconciler) reconcileUpsert(ctx context.Context, p
 				found = true
 
 				// Check for spec drift and update if needed.
-				if pub.Name != publisher.Spec.Name || pub.ExtensionName != publisher.Spec.ExtensionName {
+				// Template/templateMimeType only count as drift when the spec
+				// explicitly sets them; an unset spec value preserves whatever
+				// Dependency-Track stores remotely (often an extension default).
+				templateDrift := publisher.Spec.Template != nil && !ptrStrEqual(pub.Template, publisher.Spec.Template)
+				templateMimeDrift := publisher.Spec.TemplateMimeType != nil && !ptrStrEqual(pub.TemplateMimeType, publisher.Spec.TemplateMimeType)
+				if pub.Name != publisher.Spec.Name ||
+					pub.ExtensionName != publisher.Spec.ExtensionName ||
+					templateDrift ||
+					templateMimeDrift {
 					log.Info("updating publisher due to spec drift", "uuid", pub.Uuid, "oldName", pub.Name, "newName", publisher.Spec.Name, "oldExt", pub.ExtensionName, "newExt", publisher.Spec.ExtensionName)
 					updateReq := dtapi.UpdateNotificationPublisherRequest{
 						Uuid:          pub.Uuid,
@@ -126,6 +134,12 @@ func (r *NotificationPublisherReconciler) reconcileUpsert(ctx context.Context, p
 					}
 					if publisher.Spec.Description != "" {
 						updateReq.Description = &publisher.Spec.Description
+					}
+					if publisher.Spec.Template != nil {
+						updateReq.Template = publisher.Spec.Template
+					}
+					if publisher.Spec.TemplateMimeType != nil {
+						updateReq.TemplateMimeType = publisher.Spec.TemplateMimeType
 					}
 					if _, _, err := apiClient.NotificationAPI.UpdateNotificationPublisher(authCtx).UpdateNotificationPublisherRequest(updateReq).Execute(); err != nil {
 						return r.failPublisherStatus(ctx, publisher, "PublisherUpdateFailed",
@@ -149,6 +163,15 @@ func (r *NotificationPublisherReconciler) reconcileUpsert(ctx context.Context, p
 		}
 		if publisher.Spec.Description != "" {
 			createReq.Description = &publisher.Spec.Description
+		}
+		// Forward the optional custom template and mime type. Omitted values
+		// are left nil so the generated client excludes them from the JSON
+		// body and Dependency-Track applies the publisher extension defaults.
+		if publisher.Spec.Template != nil {
+			createReq.Template = publisher.Spec.Template
+		}
+		if publisher.Spec.TemplateMimeType != nil {
+			createReq.TemplateMimeType = publisher.Spec.TemplateMimeType
 		}
 		created, httpRes, err := apiClient.NotificationAPI.CreateNotificationPublisher(authCtx).CreateNotificationPublisherRequest(createReq).Execute()
 		if err != nil {
@@ -323,6 +346,17 @@ func setPublisherCondition(publisher *dependencytrackv1alpha1.NotificationPublis
 		Message:            message,
 		ObservedGeneration: publisher.Generation,
 	})
+}
+
+// ptrStrEqual reports whether two *string values denote the same string.
+// Two nil pointers are considered equal; a nil and a non-nil pointer are not.
+// Callers gate comparisons on the spec value being set, so a nil spec value
+// (meaning "leave the remote default alone") never reaches this comparison.
+func ptrStrEqual(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // SetupWithManager sets up the controller with the Manager.

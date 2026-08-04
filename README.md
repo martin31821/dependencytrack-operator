@@ -126,6 +126,8 @@ Creates and manages a **notification publisher** in DependencyTrack — a config
 | `spec.name` | string | Yes | Display name for the publisher in DependencyTrack |
 | `spec.extensionName` | string | Yes | Publisher extension identifier (e.g. `slack`, `email`, `webhook`, `opsgenie`) |
 | `spec.description` | string | No | Human-readable description (max 1024 chars) |
+| `spec.template` | string | No | Custom notification message template applied by the publisher. Unlike the legacy per-rule `message`, this is unconstrained in length. When omitted, DependencyTrack applies the extension default. |
+| `spec.templateMimeType` | string | No | Media type of the template body (e.g. `text/plain`, `text/html`, `application/json`); max 255 chars. When omitted, DependencyTrack applies the extension default. |
 | `status.uuid` | string | — | DependencyTrack UUID assigned to the publisher |
 | `status.name` | string | — | Name last synced to DependencyTrack |
 | `status.conditions` | []Condition | — | Reconciliation state |
@@ -144,6 +146,21 @@ spec:
   description: "Publishes critical vulnerability events to #security-alerts"
 ```
 
+A custom notification body is configured on the publisher via `template` and `templateMimeType`. This is the supported mechanism for bespoke message bodies and is unconstrained in length (the legacy per-rule `message` field was capped at 4096 chars and is not modeled by this operator):
+
+```yaml
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: NotificationPublisher
+metadata:
+  name: webhook-publisher
+  namespace: default
+spec:
+  name: Webhook Publisher
+  extensionName: webhook
+  template: '{"text":"{{project.name}}: {{notification.subject}}"}'
+  templateMimeType: application/json
+```
+
 The publisher must exist and be `Ready` before any `NotificationRule` can reference it.
 
 ### NotificationRule
@@ -160,7 +177,6 @@ Creates and manages a **notification rule** in DependencyTrack — a policy that
 | `spec.enabled` | bool | No | Whether the rule is active (default: `true`) |
 | `spec.notifyOn` | []string | No | Event types that trigger the rule (e.g. `NEW_VULNERABILITY`, `VULNERABILITY_SCAN_COMPLETED`) |
 | `spec.filterExpression` | string | No | QL filter string for the rule (max 1024 chars) |
-| `spec.message` | string | No | Custom notification message template (max 4096 chars) |
 | `spec.publisherConfigSecretRef` | object | No | Secret containing publisher-specific config JSON (see below) |
 | `spec.logSuccessfulPublish` | bool | No | Log successful publishes; defaults to false |
 | `spec.notifyChildren` | bool | No | Apply to child projects (only for PORTFOLIO/SYSTEM scope) |
