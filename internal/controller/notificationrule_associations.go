@@ -282,8 +282,16 @@ func convergeProjectAssociations(
 		Name:     currentRule.Name,
 		Enabled:  currentRule.Enabled,
 	}
+	// Default to an empty non-nil slice when the remote rule has no notifyOn.
+	// A nil NotifyOn is omitted by the generated UpdateNotificationRuleRequest's
+	// custom JSON marshalling (IsNil check in ToMap()), and Dependency-Track
+	// v5.0.2 NPEs in its update handler — getNotifyOn().stream() throws at
+	// NotificationQueryManager.java:148 — when notifyOn deserializes to null.
+	// Passing []string{} transmits "notifyOn":[] instead.
 	if currentRule.NotifyOn != nil {
 		updateReq.NotifyOn = currentRule.NotifyOn
+	} else {
+		updateReq.NotifyOn = []string{}
 	}
 	if currentRule.FilterExpression != nil {
 		updateReq.FilterExpression = currentRule.FilterExpression

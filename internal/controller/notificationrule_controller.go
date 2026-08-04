@@ -162,9 +162,16 @@ func (r *NotificationRuleReconciler) reconcileUpsert(ctx context.Context, rule *
 					if rule.Spec.FilterExpression != "" {
 						updateReq.FilterExpression = &rule.Spec.FilterExpression
 					}
-					if len(rule.Spec.NotifyOn) > 0 {
-						updateReq.NotifyOn = notifyOnToStrings(rule.Spec.NotifyOn)
-					}
+					// notifyOnToStrings always returns a non-nil slice (make([]string, 0)
+					// for empty input). Assign unconditionally rather than guarding on
+					// len(rule.Spec.NotifyOn) > 0, so "notifyOn" is always present in
+					// the serialized update payload. Otherwise the generated
+					// UpdateNotificationRuleRequest omits the field (IsNil check in
+					// ToMap()), and Dependency-Track v5.0.2 NPEs in its update handler:
+					// getNotifyOn().stream() throws at NotificationQueryManager.java:148
+					// when notifyOn deserializes to null. Transmitting "[]" conveys
+					// "fires on no events" without dropping the field.
+					updateReq.NotifyOn = notifyOnToStrings(rule.Spec.NotifyOn)
 					if publisherConfig != "" {
 						updateReq.PublisherConfig = &publisherConfig
 					}

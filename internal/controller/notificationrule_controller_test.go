@@ -86,6 +86,13 @@ type notificationRuleMockDTServer struct {
 	failList          bool
 	failDelete        bool
 	failSchema        bool
+	// crashOnNilNotifyOn simulates the Dependency-Track v5.0.2 NPE in
+	// NotificationQueryManager.updateNotificationRule (line 148) when the
+	// update request's notifyOn field is null — i.e. omitted from the JSON
+	// body. When true, handleUpdate responds with HTTP 500 if the decoded
+	// request has a nil NotifyOn, reproducing the production crash so the
+	// operator's defensive serialization can be asserted against it.
+	crashOnNilNotifyOn bool
 }
 
 // configSchemaPathRE is defined in notificationrule_test_helpers.go
@@ -160,6 +167,19 @@ func (s *notificationRuleMockDTServer) handleUpdate(w http.ResponseWriter, r *ht
 		return
 	}
 	s.lastUpdateRequest = &req
+
+	// Faithful reproduction of the Dependency-Track v5.0.2 NPE: when the
+	// update payload omits "notifyOn", the server deserializes it as null
+	// and crashes at NotificationQueryManager.getNotifyOn().stream():
+	//   java.lang.NullPointerException: Cannot invoke "java.util.Set.stream()"
+	//   because the return value of "...NotificationRule.getNotifyOn()" is null
+	if s.crashOnNilNotifyOn && !req.HasNotifyOn() {
+		body := "Uncaught internal server error\n" +
+			"java.lang.NullPointerException: Cannot invoke \"java.util.Set.stream()\"" +
+			" because the return value of \"org.dependencytrack.model.NotificationRule.getNotifyOn()\" is null"
+		http.Error(w, body, http.StatusInternalServerError)
+		return
+	}
 
 	rule, exists := s.rules[req.Uuid]
 	if !exists {
@@ -936,6 +956,75 @@ var _ = Describe("NotificationRule Controller", func() {
 			Expect(*ruleInMock.Enabled).To(BeTrue())
 			Expect(ruleInMock.NotifyOn).To(ContainElements("NEW_VULNERABILITY", "NEW_VULNERABLE_DEPENDENCY"))
 			Expect(*ruleInMock.FilterExpression).To(Equal("vulnerable"))
+		})
+	})
+
+	// ======================================================================
+	// Regression: notifyOn must never be omitted on update (NPE defense)
+	// Reproduces the Dependency-Track v5.0.2 NPE at
+	// NotificationQueryManager.java:148 (getNotifyOn().stream()) caused by
+	// the generated UpdateNotificationRuleRequest omitting "notifyOn" when
+	// the field is nil. Triggered in practice by an MS Teams rule whose
+	// spec carries no notifyOn: the staged-create succeeds, then a drift-driven
+	// update ships a payload lacking notifyOn, and the server crashes.
+	// ======================================================================
+
+	Context("When an update is triggered and the spec has no notifyOn", func() {
+		const name = "npeon-update-rule"
+		BeforeEach(func() {
+			publisher = createPublisher(name+"-pub", ruleNS)
+			setPublisherUUID(name+"-pub", ruleNS, "pub-created-uuid-123")
+			// Seed a remote rule with a divergent Name to force the update
+			// path, mirroring a staged-create residue with no NotifyOn set.
+			mockServer.mu.Lock()
+			mockServer.rules["npeon-uuid"] = &dtapi.NotificationRule{
+				Uuid:              "npeon-uuid",
+				Name:              "npeon-old-name",
+				Scope:             "PORTFOLIO",
+				TriggerType:       "EVENT",
+				NotificationLevel: strPtr("WARN"),
+			}
+			mockServer.mu.Unlock()
+
+			r := createRuleWithFinalizer(name, ruleNS, name+"-pub")
+			r.Spec.Name = "npeon-new-name" // diverges from seeded Name → drift
+			// Deliberately NO Spec.NotifyOn — this is the reproducer.
+			Expect(k8sClient.Create(ctx, r)).To(Succeed())
+			DeferCleanup(deleteRule, name, ruleNS)
+			DeferCleanup(func() { k8sClient.Delete(ctx, publisher) })
+			setRuleUUID(name, ruleNS, "npeon-uuid")
+		})
+
+		// NOTE: single It per Context — the project gotcha warns that a shared
+		// resource name across adjacent Its collides with finalizer-retained
+		// objects still in Terminating state from DeferCleanup.
+		It("should transmit notifyOn as an empty array and not trigger the server NPE", func() {
+			// Emulate the DT v5.0.2 NPE path: any update whose payload omits
+			// notifyOn gets a synthetic 500. The operator must therefore send
+			// "notifyOn":[] to stay alive.
+			mockServer.mu.Lock()
+			mockServer.crashOnNilNotifyOn = true
+			mockServer.mu.Unlock()
+
+			_, err := ctrl.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: ruleNS}})
+			Expect(err).NotTo(HaveOccurred())
+
+			mockServer.mu.Lock()
+			lastReq := mockServer.lastUpdateRequest
+			mockServer.mu.Unlock()
+			Expect(lastReq).NotTo(BeNil())
+			// HasNotifyOn() is true only when NotifyOn survived (de)serialization
+			// as a non-nil value — i.e. the JSON body contained "notifyOn":[].
+			Expect(lastReq.HasNotifyOn()).To(BeTrue(),
+				"update request must include notifyOn (even if empty)")
+			Expect(lastReq.NotifyOn).To(BeEmpty())
+
+			rule := &dependencytrackv1alpha1.NotificationRule{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: ruleNS}, rule)).To(Succeed())
+			cond := meta.FindStatusCondition(rule.Status.Conditions, conditionReady)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(cond.Reason).To(Equal("RuleSynced"))
 		})
 	})
 
