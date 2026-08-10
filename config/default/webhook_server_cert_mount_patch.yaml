@@ -1,0 +1,18 @@
+# Mount the Team validating webhook serving cert into the manager Deployment (MEM023).
+# The manager's webhook server listens on :9443 and loads
+# /tmp/k8s-webhook-server/serving-certs/tls.crt + tls.key at startup; without
+# this mount the manager pods CrashLoopBackOff with
+# "open /tmp/k8s-webhook-server/serving-certs/tls.crt: no such file".
+# Mirrors the cert_metrics_manager_patch.yaml JsonPatch idiom.
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    mountPath: /tmp/k8s-webhook-server/serving-certs
+    name: webhook-server-cert
+    readOnly: true
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: webhook-server-cert
+    secret:
+      secretName: deptrack-operator-webhook-server-cert

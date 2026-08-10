@@ -1,0 +1,26 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-dependencytrack-mko-dev-v1alpha1-team
+  failurePolicy: Fail
+  name: team.validating.dependencytrack.mko.dev
+  rules:
+  - apiGroups:
+    - dependencytrack.mko.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - teams
+  sideEffects: None

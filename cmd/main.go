@@ -280,6 +280,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "NotificationRule")
 		os.Exit(1)
 	}
+	if err := (&dependencytrackv1alpha1.Team{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to set up webhook for Team")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {

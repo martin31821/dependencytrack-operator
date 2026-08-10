@@ -35,6 +35,7 @@
               go
               golangci-lint
               helmify
+              kubebuilder
               kubectl
               kubernetes-controller-tools
               kubernetes-helm

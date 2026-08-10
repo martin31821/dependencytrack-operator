@@ -57,6 +57,10 @@ spec:
           }}
         securityContext: {{- toYaml .Values.controllerManager.manager.containerSecurityContext
           | nindent 10 }}
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-server-cert
+          readOnly: true
       nodeSelector: {{- toYaml .Values.controllerManager.nodeSelector | nindent 8 }}
       securityContext: {{- toYaml .Values.controllerManager.podSecurityContext | nindent
         8 }}
@@ -65,3 +69,7 @@ spec:
       tolerations: {{- toYaml .Values.controllerManager.tolerations | nindent 8 }}
       topologySpreadConstraints: {{- toYaml .Values.controllerManager.topologySpreadConstraints
         | nindent 8 }}
+      volumes:
+      - name: webhook-server-cert
+        secret:
+          secretName: deptrack-operator-webhook-server-cert

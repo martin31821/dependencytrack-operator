@@ -28,13 +28,17 @@ The operator provides five CRDs in the `dependencytrack.mko.dev/v1alpha1` API gr
 
 Creates and manages a **Team** in DependencyTrack.
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `spec.name` | string | No | Human-readable team name |
-| `spec.permissions` | []string | No | List of permission names to assign (omit to leave unchanged, empty array to clear all) |
-| `status.uuid` | string | — | DependencyTrack UUID assigned to the team |
-| `status.permissions` | string | — | Comma-separated list of permissions last synced (observability only) |
-| `status.conditions` | []Condition | — | Reconciliation state |
+| Field                       | Type               | Required | Description                                                                                                                                                                                                                                                                                                             |
+| --------------------------- | ------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spec.name`                 | string             | No       | Human-readable team name                                                                                                                                                                                                                                                                                                |
+| `spec.permissions`          | []string           | No       | List of permission names to assign (omit to leave unchanged, empty array to clear all)                                                                                                                                                                                                                                  |
+| `spec.oidc`                 | object             | No       | Optional OIDC group-mapping configuration. A nil value disables OIDC management (zero API traffic). See [OpenID Connect (OIDC)](#openid-connect-oidc-group-to-team-mapping) below.                                                                                                                                      |
+| `spec.oidc.groups`          | []string           | No       | Ordered list of OIDC group names (Identity Provider claim values) to bind to this team. Compared verbatim—case is preserved; omit to leave existing mappings unchanged, empty array to clear all mappings. Validated by the admission webhook (blank/whitespace-only and trimmed-exact-duplicate entries are rejected). |
+| `status.uuid`               | string             | —        | DependencyTrack UUID assigned to the team                                                                                                                                                                                                                                                                               |
+| `status.permissions`        | string             | —        | Comma-separated list of permissions last synced (observability only)                                                                                                                                                                                                                                                    |
+| `status.oidc`               | object             | —        | Observed OIDC mapping state; `nil` before first reconciliation, empty `ownedMappings` afterward.                                                                                                                                                                                                                        |
+| `status.oidc.ownedMappings` | []OwnedOIDCMapping | —        | Bindings this operator created/claims: `groupName`, `groupUuid`, `teamUuid`, `mappingUuid`. Treated as the authoritative diff anchor.                                                                                                                                                                                   |
+| `status.conditions`         | []Condition        | —        | Reconciliation state                                                                                                                                                                                                                                                                                                    |
 
 **Example:**
 
@@ -51,17 +55,38 @@ spec:
     - VIEW_PORTFOLIO
 ```
 
+An OIDC-mapped team differs only by the `spec.oidc.groups` stanza. While it is
+present, the controller ensures every named group is mapped to this team in
+Dependency-Track (see [OpenID Connect (OIDC)](#openid-connect-oidc-group-to-team-mapping)):
+
+```yaml
+apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Team
+metadata:
+  name: my-team
+  namespace: default
+spec:
+  name: My Team
+  permissions:
+    - PORTFOLIO_MANAGEMENT
+    - VIEW_PORTFOLIO
+  oidc:
+    groups:
+      - admins
+      - developers
+```
+
 ### APIKey
 
 Creates and manages an **API access key** in DependencyTrack, scoped to a Team. The generated key value is stored in a Kubernetes `Secret`.
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `spec.teamRef` | string | Yes | Name of the `Team` CR (same namespace) this key belongs to |
-| `spec.secretName` | string | Yes | Kubernetes `Secret` where the generated key is stored |
-| `spec.comment` | string | No | Human-readable label for the key in DependencyTrack |
-| `status.publicId` | string | — | DependencyTrack's stable key identifier (for updates/deletes) |
-| `status.conditions` | []Condition | — | Reconciliation state |
+| Field               | Type        | Required | Description                                                   |
+| ------------------- | ----------- | -------- | ------------------------------------------------------------- |
+| `spec.teamRef`      | string      | Yes      | Name of the `Team` CR (same namespace) this key belongs to    |
+| `spec.secretName`   | string      | Yes      | Kubernetes `Secret` where the generated key is stored         |
+| `spec.comment`      | string      | No       | Human-readable label for the key in DependencyTrack           |
+| `status.publicId`   | string      | —        | DependencyTrack's stable key identifier (for updates/deletes) |
+| `status.conditions` | []Condition | —        | Reconciliation state                                          |
 
 **Example:**
 
@@ -83,17 +108,17 @@ After reconciliation, the operator creates a `Secret` with the API key value. Th
 
 Creates and manages a global **Policy** and its conditions in DependencyTrack. The Kubernetes resource is namespaced, but DependencyTrack policies are global; policy names must therefore be unique across all namespaces managed by the operator.
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `spec.name` | string | Yes | Human-readable policy name; must be globally unique in DependencyTrack |
-| `spec.operator` | string | Yes | Condition matching mode: `ANY` if one condition must match, or `ALL` if every condition must match |
-| `spec.violationState` | string | Yes | Dependency-Track violation state: `INFO` (Inform), `WARN` (Warn), or `FAIL` (Fail) |
-| `spec.conditions` | []PolicyCondition | Yes | One or more inline conditions evaluated by DependencyTrack |
-| `spec.conditions[].subject` | string | Yes | Dependency-Track subject, such as `SEVERITY`, `LICENSE`, `CPE`, `PACKAGE_URL`, or `VULNERABILITY_ID` |
-| `spec.conditions[].operator` | string | Yes | Comparison operator: `IS` or `IS_NOT` |
-| `spec.conditions[].value` | string | Yes | Value compared against the subject |
-| `status.uuid` | string | — | DependencyTrack UUID used as the authoritative remote identity |
-| `status.conditions` | []Condition | — | Reconciliation state |
+| Field                        | Type              | Required | Description                                                                                          |
+| ---------------------------- | ----------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `spec.name`                  | string            | Yes      | Human-readable policy name; must be globally unique in DependencyTrack                               |
+| `spec.operator`              | string            | Yes      | Condition matching mode: `ANY` if one condition must match, or `ALL` if every condition must match   |
+| `spec.violationState`        | string            | Yes      | Dependency-Track violation state: `INFO` (Inform), `WARN` (Warn), or `FAIL` (Fail)                   |
+| `spec.conditions`            | []PolicyCondition | Yes      | One or more inline conditions evaluated by DependencyTrack                                           |
+| `spec.conditions[].subject`  | string            | Yes      | Dependency-Track subject, such as `SEVERITY`, `LICENSE`, `CPE`, `PACKAGE_URL`, or `VULNERABILITY_ID` |
+| `spec.conditions[].operator` | string            | Yes      | Comparison operator: `IS` or `IS_NOT`                                                                |
+| `spec.conditions[].value`    | string            | Yes      | Value compared against the subject                                                                   |
+| `status.uuid`                | string            | —        | DependencyTrack UUID used as the authoritative remote identity                                       |
+| `status.conditions`          | []Condition       | —        | Reconciliation state                                                                                 |
 
 **Example:**
 
@@ -121,16 +146,16 @@ The operator creates the policy first and then persists each inline condition th
 
 Creates and manages a **notification publisher** in DependencyTrack — a configurable endpoint (Slack, email, webhook, etc.) that receives notification events.
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `spec.name` | string | Yes | Display name for the publisher in DependencyTrack |
-| `spec.extensionName` | string | Yes | Publisher extension identifier (e.g. `slack`, `email`, `webhook`, `opsgenie`) |
-| `spec.description` | string | No | Human-readable description (max 1024 chars) |
-| `spec.template` | string | No | Custom notification message template applied by the publisher. Unlike the legacy per-rule `message`, this is unconstrained in length. When omitted, DependencyTrack applies the extension default. |
-| `spec.templateMimeType` | string | No | Media type of the template body (e.g. `text/plain`, `text/html`, `application/json`); max 255 chars. When omitted, DependencyTrack applies the extension default. |
-| `status.uuid` | string | — | DependencyTrack UUID assigned to the publisher |
-| `status.name` | string | — | Name last synced to DependencyTrack |
-| `status.conditions` | []Condition | — | Reconciliation state |
+| Field                   | Type        | Required | Description                                                                                                                                                                                        |
+| ----------------------- | ----------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spec.name`             | string      | Yes      | Display name for the publisher in DependencyTrack                                                                                                                                                  |
+| `spec.extensionName`    | string      | Yes      | Publisher extension identifier (e.g. `slack`, `email`, `webhook`, `opsgenie`)                                                                                                                      |
+| `spec.description`      | string      | No       | Human-readable description (max 1024 chars)                                                                                                                                                        |
+| `spec.template`         | string      | No       | Custom notification message template applied by the publisher. Unlike the legacy per-rule `message`, this is unconstrained in length. When omitted, DependencyTrack applies the extension default. |
+| `spec.templateMimeType` | string      | No       | Media type of the template body (e.g. `text/plain`, `text/html`, `application/json`); max 255 chars. When omitted, DependencyTrack applies the extension default.                                  |
+| `status.uuid`           | string      | —        | DependencyTrack UUID assigned to the publisher                                                                                                                                                     |
+| `status.name`           | string      | —        | Name last synced to DependencyTrack                                                                                                                                                                |
+| `status.conditions`     | []Condition | —        | Reconciliation state                                                                                                                                                                               |
 
 **Example:**
 
@@ -167,26 +192,26 @@ The publisher must exist and be `Ready` before any `NotificationRule` can refere
 
 Creates and manages a **notification rule** in DependencyTrack — a policy that routes notification events to a configured publisher.
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `spec.name` | string | Yes | Display name for the rule (max 255 chars) |
-| `spec.scope` | string | Yes | Applies to: `SYSTEM` or `PORTFOLIO` |
-| `spec.triggerType` | string | Yes | Fires on: `EVENT` or `SCHEDULE` |
-| `spec.level` | string | Yes | Filter by severity: `INFORMATIONAL`, `WARNING`, or `ERROR` |
-| `spec.publisherRef.name` | string | Yes | Name of the `NotificationPublisher` CR in the same namespace |
-| `spec.enabled` | bool | No | Whether the rule is active (default: `true`) |
-| `spec.notifyOn` | []string | No | Event types that trigger the rule (e.g. `NEW_VULNERABILITY`, `VULNERABILITY_SCAN_COMPLETED`) |
-| `spec.filterExpression` | string | No | QL filter string for the rule (max 1024 chars) |
-| `spec.publisherConfigSecretRef` | object | No | Secret containing publisher-specific config JSON (see below) |
-| `spec.logSuccessfulPublish` | bool | No | Log successful publishes; defaults to false |
-| `spec.notifyChildren` | bool | No | Apply to child projects (only for PORTFOLIO/SYSTEM scope) |
-| `spec.scheduleCron` | string | No | Cron expression for scheduled rules; required when `triggerType: SCHEDULE` |
-| `spec.scheduleSkipUnchanged` | bool | No | Skip emitting notifications if result is unchanged (schedule only) |
-| `spec.teams` | []string | No | Team CR names whose remote UUID is associated with this rule |
-| `spec.projects` | []string | No | Project UUIDs to associate with this rule (ignored for PORTFOLIO/SYSTEM scope) |
-| `status.uuid` | string | — | DependencyTrack UUID assigned to the rule |
-| `status.name` | string | — | Name last synced to DependencyTrack |
-| `status.conditions` | []Condition | — | Reconciliation state |
+| Field                           | Type        | Required | Description                                                                                  |
+| ------------------------------- | ----------- | -------- | -------------------------------------------------------------------------------------------- |
+| `spec.name`                     | string      | Yes      | Display name for the rule (max 255 chars)                                                    |
+| `spec.scope`                    | string      | Yes      | Applies to: `SYSTEM` or `PORTFOLIO`                                                          |
+| `spec.triggerType`              | string      | Yes      | Fires on: `EVENT` or `SCHEDULE`                                                              |
+| `spec.level`                    | string      | Yes      | Filter by severity: `INFORMATIONAL`, `WARNING`, or `ERROR`                                   |
+| `spec.publisherRef.name`        | string      | Yes      | Name of the `NotificationPublisher` CR in the same namespace                                 |
+| `spec.enabled`                  | bool        | No       | Whether the rule is active (default: `true`)                                                 |
+| `spec.notifyOn`                 | []string    | No       | Event types that trigger the rule (e.g. `NEW_VULNERABILITY`, `VULNERABILITY_SCAN_COMPLETED`) |
+| `spec.filterExpression`         | string      | No       | QL filter string for the rule (max 1024 chars)                                               |
+| `spec.publisherConfigSecretRef` | object      | No       | Secret containing publisher-specific config JSON (see below)                                 |
+| `spec.logSuccessfulPublish`     | bool        | No       | Log successful publishes; defaults to false                                                  |
+| `spec.notifyChildren`           | bool        | No       | Apply to child projects (only for PORTFOLIO/SYSTEM scope)                                    |
+| `spec.scheduleCron`             | string      | No       | Cron expression for scheduled rules; required when `triggerType: SCHEDULE`                   |
+| `spec.scheduleSkipUnchanged`    | bool        | No       | Skip emitting notifications if result is unchanged (schedule only)                           |
+| `spec.teams`                    | []string    | No       | Team CR names whose remote UUID is associated with this rule                                 |
+| `spec.projects`                 | []string    | No       | Project UUIDs to associate with this rule (ignored for PORTFOLIO/SYSTEM scope)               |
+| `status.uuid`                   | string      | —        | DependencyTrack UUID assigned to the rule                                                    |
+| `status.name`                   | string      | —        | Name last synced to DependencyTrack                                                          |
+| `status.conditions`             | []Condition | —        | Reconciliation state                                                                         |
 
 **Example:**
 
@@ -238,6 +263,145 @@ spec:
 ```
 
 The operator validates the JSON config against the publisher extension schema and reports failures via the `Ready` status condition.
+
+## OpenID Connect (OIDC) Group-to-Team Mapping
+
+The operator integrates with Dependency-Track's
+[OIDC group mapping](https://docs.dependencytrack.org/integrations/oauth2_openid_connect/)
+feature so that a `Team`'s `spec.oidc.groups` declaratively drives which Identity
+Provider (IdP) groups are bound to that team. Mapping is **edge-oriented**: the
+operator manages the OIDC _bindings_ (group↔team), never the group _objects_,
+so groups shared across teams or authored by the platform survive a team
+shrink or deletion.
+
+### Prerequisites
+
+Dependency-Track must have OIDC provisioned before the operator can wire
+mappings. When installing Dependency-Track (e.g. via its
+[`dependency-track`](https://github.com/DependencyTrack/helm-charts) Helm chart),
+enable OIDC on the API server by injecting these environment variables. They
+use the single-`O` spelling recognized by Dependency-Track:
+
+| Variable          | Purpose                                                             | Example                       |
+| ----------------- | ------------------------------------------------------------------- | ----------------------------- |
+| `DT_OIDC_ENABLED` | Enables the `/v1/oidc/*` endpoints. Must be `"true"`.               | `true`                        |
+| `DT_OIDC_ISSUER`  | Base URL of the OIDC Issuer (must expose a well-known JWKS config). | `https://dex.example.com/dex` |
+
+Through the Helm chart these are injected via `apiServer.extraEnv` as a standard
+Kubernetes `EnvVar` list:
+
+```yaml
+apiServer:
+  extraEnv:
+    - name: DT_OIDC_ENABLED
+      value: "true"
+    - name: DT_OIDC_ISSUER
+      value: https://dex.example.com/dex
+```
+
+Any compliant OIDC issuer works (Dex, Keycloak, Okta, Auth0, Azure AD, …). The
+[e2e fixture](../test/utils/utils.go) ships a minimal
+[ghcr.io/dexidp/dex](https://github.com/dexidp/dex) provider as a reference
+IdP backed by its builtin local connector.
+
+Once `DT_OIDC_ENABLED=true` and the issuer responds, Dependency-Track answers
+`GET /v1/oidc/available` with `true`; the operator probes this before issuing
+any mutation and short-circuits gracefully (see [Availability](#availability))
+when it does not.
+
+### How reconciliation works
+
+When `spec.oidc` is non-nil and the operator obtains an authenticated
+Dependency-Track client, it diffs the **desired** group list against the
+**previously-owned** bindings recorded in `status.oidc.ownedMappings` and
+converges:
+
+1. **Dedupe** the desired list (blanks dropped, insertion-order preserved).
+2. **Diff** against `status.oidc.ownedMappings` keyed by `GroupName`:
+   - _Survivors_ (still desired) are carried over verbatim—no server round-trip,
+     so reordering a list never churns the cluster.
+   - _Stale_ edges (no longer desired) are pruned individually by mapping UUID
+     via `DELETE /v1/oidc/mapping/{uuid}`. Group objects are **never** deleted.
+   - _New_ names are established by looking up an existing group by exact-case
+     name, or creating it, then `PUT /v1/oidc/mapping` to bind it to the team.
+3. **Persist** the resulting binding set to `status.oidc.ownedMappings` as the
+   authoritative diff anchor for the next reconcile.
+
+Concretely, shrinking `developers` out of a team deletes only that mapping edge;
+the `developers` group object remains. Deleting the `Team` CR scrubs every
+binding the operator owns (again, by mapping UUID) before removing the team
+principal—so shared groups outlive any single team.
+
+#### Availability
+
+`GET /v1/oidc/*` requires an OAuth2/session bearer token; Dependency-Track refuses
+API-key auth on those routes (returning `401`). The controller therefore threads
+the authenticated context obtained from `ClientProvider.Get` into every OIDC
+call—not the ambient reconcile context, which carries no token and would make
+every probe fail with `401`.
+
+When `IsAvailable` reports `false` (OIDC not yet provisioned), the operator
+makes **no** mutations and leaves `status.oidc` untouched so the last-known
+ownership survives to retry. Upserts requeue; deletions defer with the
+finalizer held until OIDC becomes available.
+
+#### Status fields
+
+| Path                                      | Meaning                                                  |
+| ----------------------------------------- | -------------------------------------------------------- |
+| `status.oidc`                             | `nil` until first reconciliation; populated afterward.   |
+| `status.oidc.ownedMappings[].groupName`   | IdPs group claim, stored verbatim (case preserved).      |
+| `status.oidc.ownedMappings[].groupUuid`   | Server-issued group UUID.                                |
+| `status.oidc.ownedMappings[].teamUuid`    | Server-issued team UUID.                                 |
+| `status.oidc.ownedMappings[].mappingUuid` | Server-issued binding UUID; the only thing ever deleted. |
+
+Inspect it with:
+
+```sh
+kubectl get team <name> -o jsonpath='{.status.oidc}'
+```
+
+#### Idempotent restore (wipe-safe)
+
+If `status.oidc` is ever cleared (operator upgrade resetting the status
+subresource, or a never-reconciled team), the controller enters
+restore-only mode: it (re)creates every desired binding via
+lookup-or-create-then-bind, but emits **zero** `DELETE` calls—there is no
+trusted prior ownership to difference against, so pruning cannot erase
+peer-authored or platform-managed bindings. Adoption races (two actors creating
+the same group concurrently) resolve idempotently: a `409 Conflict` on create
+triggers a relist-and-adopt-by-exact-case-name, never a clobber.
+
+#### Admission validation
+
+A fail-closed validating webhook (`team.validating.dependencytrack.mko.dev`)
+guards `spec.oidc.groups` before it reaches the controller:
+
+- A `nil` `spec.oidc` disables OIDC management (no-op).
+- A non-nil config with a `nil`/empty `groups` slice is **valid**—it is an
+  intentional "bind this team to zero groups," converged to clearing by the
+  controller.
+- Each entry is judged on its trimmed form: blank/whitespace-only entries are
+  rejected, and trimmed-exact-duplicate entries collide (but `admins` ≠ `ADMINS`—
+  comparison is case-sensitive; only identically-spelled trimmed values clash).
+
+Original casing is preserved on the wire so operators retain full control over
+matching semantics against upstream IdP claims.
+
+### Observability
+
+The controller emits Kubernetes Events reflecting OIDC outcomes:
+
+| Reason               | Trigger                                                   |
+| -------------------- | --------------------------------------------------------- |
+| `OIDCMappingCreated` | Mappings ensured (carries the count).                     |
+| `OIDCMappingSkipped` | Nothing to create (empty/zero desired).                   |
+| `OIDCUnavailable`    | Warning: OIDC not provisioned; mappings left untouched.   |
+| `OIDCError`          | Warning: reconciliation faulted (details in the message). |
+| `OIDCMappingRemoved` | Finalizer scrubbed owned mappings during team deletion.   |
+
+Failures also surface on the `Ready` condition (`reason=OIDCUnavailable` or
+`reason=OIDCError`) with the underlying error in the message.
 
 ## Getting Started
 
@@ -366,11 +530,11 @@ kubectl logs deploy/deptrack-operator-controller-manager --tail=50
 
 The operator container requires these environment variables:
 
-| Variable                      | Description                                                                                                        | Default                 |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| `DEPTRACK_URL`                | HTTP(S) URL of the DependencyTrack instance to manage (e.g. `http://dtrack-service:8080`)                           | `http://dtrack-service:8080` |
-| `DEPTRACK_CREDENTIALS_SECRET` | Name of the Kubernetes `Secret` that holds the `username` and `password` used to authenticate with DependencyTrack | `deptrack-credentials`  |
-| `POD_NAMESPACE`               | Namespace the operator runs in (auto-injected by Kubernetes)                                                       | auto-injected           |
+| Variable                      | Description                                                                                                        | Default                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| `DEPTRACK_URL`                | HTTP(S) URL of the DependencyTrack instance to manage (e.g. `http://dtrack-service:8080`)                          | `http://dtrack-service:8080` |
+| `DEPTRACK_CREDENTIALS_SECRET` | Name of the Kubernetes `Secret` that holds the `username` and `password` used to authenticate with DependencyTrack | `deptrack-credentials`       |
+| `POD_NAMESPACE`               | Namespace the operator runs in (auto-injected by Kubernetes)                                                       | auto-injected                |
 
 The credentials `Secret` must contain two keys:
 
@@ -407,6 +571,71 @@ controllerManager:
         cpu: 10m
         memory: 64Mi
   replicas: 2 # set > 1 for HA leader election
+```
+
+## End-to-End Tests
+
+The e2e suite (`test/e2e`) drives an ephemeral [Kind](https://kind.sigs.k8s.io/)
+cluster: it builds the manager image with `make docker-build`, pushes it into
+the Kind node with `kind load docker-image`, installs DependencyTrack (with Dex
+as the OIDC issuer) and the operator via Helm, then reconciles the sample CRs.
+
+The `Makefile` defaults to **Podman**:
+
+```makefile
+CONTAINER_TOOL ?= podman
+```
+
+### `DOCKER_HOST` requirement when using Podman
+
+Building the image goes through Podman's native CLI, so it works regardless of
+`DOCKER_HOST`. Loading the freshly built image **into the Kind cluster** is
+where `DOCKER_HOST` becomes mandatory: `kind load docker-image` speaks the
+Docker Engine API, and it reaches the runtime exclusively through whatever
+`DOCKER_HOST` advertises (falling back to the default Docker socket
+`/var/run/docker.sock`, which does not exist under a pure-Podman setup). If
+`DOCKER_HOST` is unset or points nowhere, the build succeeds but the
+load step stalls or fails, leaving the Kind node unable to schedule the operator
+because the image was never copied.
+
+Expose Podman's Docker-compatible REST socket and point `DOCKER_HOST` at it
+**before** invoking `make test-e2e`:
+
+**Linux (per-user socket):**
+
+```sh
+systemctl --user start podman.socket   # Fedora/RHEL
+export DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock
+```
+
+**Linux (system socket):**
+
+```sh
+sudo systemctl start podman.socket
+export DOCKER_HOST=unix:///run/podman/podman.sock
+```
+
+**macOS / Windows (Podman Machine):** `podman machine init && podman machine
+start` exports `DOCKER_HOST` for you; otherwise set it to the forwarded TCP
+endpoint printed by `podman env`.
+
+Verify connectivity before running the suite:
+
+```sh
+podman info >/dev/null && curl --unix-socket "${DOCKER_HOST#unix://}" version
+```
+
+Then run the tests normally:
+
+```sh
+make test-e2e
+```
+
+For faster iteration without rebuilding DependencyTrack between runs, preserve
+the cluster and the DT stack:
+
+```sh
+E2E_SKIP_CLUSTER_TEARDOWN=true E2E_SKIP_DT_TEARDOWN=true make test-e2e-fast
 ```
 
 ### Cert-manager (optional)

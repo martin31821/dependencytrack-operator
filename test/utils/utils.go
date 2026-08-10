@@ -20,6 +20,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -126,6 +127,95 @@ spec:
           `
 )
 
+// dexManifest provisions a minimal Dex OIDC provider in the dependency-track
+// namespace. Dex uses in-memory storage and its builtin local connector,
+// registering DependencyTrack as a static OIDC client so the e2e fixture can
+// exercise the full OIDC group-to-team mapping lifecycle (S05).
+var dexManifest = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dex-config
+  namespace: dependency-track
+data:
+  config.yaml: |
+    issuer: http://dex.dependency-track.svc.cluster.local:5556/dex
+    storage:
+      type: memory
+    web:
+      http: 0.0.0.0:5556
+    staticClients:
+      - id: dependency-track
+        redirectURIs:
+          - 'http://my-dependency-track-api-server.dependency-track.svc.cluster.local:8080/callback'
+        name: 'Dependency Track'
+        public: true
+    enablePasswordDB: true
+    staticPasswords:
+      - email: "admin@example.com"
+        username: "admin"
+        userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"
+        hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+    oauth2:
+      passwordConnector: local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dex
+  namespace: dependency-track
+  labels:
+    app: dex
+spec:
+  ports:
+    - port: 5556
+      targetPort: 5556
+      protocol: TCP
+  selector:
+    app: dex
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dex
+  namespace: dependency-track
+  labels:
+    app: dex
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dex
+  template:
+    metadata:
+      labels:
+        app: dex
+    spec:
+      containers:
+        - name: dex
+          image: ghcr.io/dexidp/dex:v2.45.1
+          command:
+            - /usr/local/bin/dex
+          args:
+            - serve
+            - /config/config.yaml
+          ports:
+            - containerPort: 5556
+              name: dex
+          readinessProbe:
+            tcpSocket:
+              port: 5556
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          configMap:
+            name: dex-config
+`
+
 func warnError(err error) {
 	_, _ = fmt.Fprintf(GinkgoWriter, "warning: %v\n", err)
 }
@@ -194,16 +284,67 @@ func IsPrometheusCRDsInstalled() bool {
 	return false
 }
 
-// LoadImageToKindClusterWithName loads a local docker image to the kind cluster
+// LoadImageToKindClusterWithName loads a local container image into the kind
+// cluster. It prefers the docker-aware "kind load docker-image" path when a
+// Docker daemon is reachable; when Docker is unavailable (hosts relying on
+// podman exclusively), it falls back to exporting the image with
+// "podman save" and importing it via "kind load image-archive". The latter
+// sidesteps kind's experimental podman provider, which cannot enumerate images
+// stored in podman's local repository.
 func LoadImageToKindClusterWithName(name string) error {
 	cluster := "kind"
 	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
 		cluster = v
 	}
-	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
-	cmd := exec.Command("kind", kindOptions...)
-	_, err := Run(cmd)
-	return err
+
+	if dockerDaemonReachable() {
+		kindOptions := []string{"load", "docker-image", name, "--name", cluster}
+		_, err := Run(exec.Command("kind", kindOptions...))
+		return err
+	}
+
+	podmanBin, err := exec.LookPath("podman")
+	if err != nil {
+		return fmt.Errorf("neither docker nor podman is available to load image %q into kind cluster %q", name, cluster)
+	}
+	return loadImageViaArchive(podmanBin, name, cluster)
+}
+
+// dockerDaemonReachable reports whether the docker CLI can contact a daemon.
+// Absence of the binary or an unreachable daemon yields false so callers can
+// fall back to an alternate runtime.
+func dockerDaemonReachable() bool {
+	if _, err := exec.LookPath("docker"); err != nil {
+		return false
+	}
+	cmd := exec.Command("docker", "info")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	return cmd.Run() == nil
+}
+
+// loadImageViaArchive exports the image with the podman CLI to a tarball and
+// feeds it to "kind load image-archive", bypassing kind's experimental podman
+// provider which cannot see podman-local images.
+func loadImageViaArchive(podmanBin, name, cluster string) error {
+	archive, err := os.CreateTemp("", "kind-image-*.tar")
+	if err != nil {
+		return fmt.Errorf("create temp archive: %w", err)
+	}
+	archivePath := archive.Name()
+	defer func() { _ = os.Remove(archivePath) }()
+	if err := archive.Close(); err != nil {
+		return fmt.Errorf("close temp archive: %w", err)
+	}
+
+	if _, err := Run(exec.Command(podmanBin, "save", "-o", archivePath, name)); err != nil {
+		return fmt.Errorf("podman save %s: %w", name, err)
+	}
+
+	if _, err := Run(exec.Command("kind", "load", "image-archive", archivePath, "--name", cluster)); err != nil {
+		return fmt.Errorf("kind load image-archive %s: %w", archivePath, err)
+	}
+	return nil
 }
 
 // GetNonEmptyLines converts given command output string into individual objects
@@ -239,6 +380,44 @@ func GenerateKEK() (string, error) {
 		return "", fmt.Errorf("openssl rand: %w", err)
 	}
 	return string(output), nil
+}
+
+// ProvisionDex deploys a Dex OIDC provider (Deployment + ClusterIP Service +
+// ConfigMap) into the dependency-track namespace. Dex uses in-memory storage
+// and its builtin local connector, registering DependencyTrack as a static
+// OIDC client.
+// The issuer URL is http://dex.dependency-track.svc.cluster.local:5556/dex.
+// Called from InstallDependencyTrack so the issuer is resolvable before DT
+// fetches its well-known OIDC metadata.
+func ProvisionDex() error {
+	_, _ = fmt.Fprintf(GinkgoWriter, "Provisioning Dex OIDC provider...\\n")
+	tmpFile, err := os.CreateTemp("", "dex-*.yaml")
+	if err != nil {
+		return fmt.Errorf("create dex temp file: %w", err)
+	}
+	defer func() {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+	}()
+	if _, err := tmpFile.WriteString(dexManifest); err != nil {
+		return fmt.Errorf("write dex manifest: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("close dex manifest: %w", err)
+	}
+	if _, err := Run(exec.Command("kubectl", "apply", "-f", tmpFile.Name())); err != nil {
+		return fmt.Errorf("apply dex manifest: %w", err)
+	}
+	// Wait for Dex to become ready so the issuer is resolvable before DT boots.
+	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for Dex to be Ready...\\n")
+	waitCmd := exec.Command("kubectl", "wait", "--for=condition=Ready",
+		"pod", "-l", "app=dex",
+		"-n", "dependency-track",
+		"--timeout", "2m")
+	if _, err := Run(waitCmd); err != nil {
+		return fmt.Errorf("timeout waiting for Dex pod: %w", err)
+	}
+	return nil
 }
 
 // InstallDependencyTrack installs PostgreSQL and DependencyTrack into the
@@ -312,6 +491,12 @@ func InstallDependencyTrack() error {
 				"kek": map[string]any{"value": strings.TrimSpace(keq)},
 			},
 		},
+		"apiServer": map[string]any{
+			"extraEnv": []map[string]any{
+				{"name": "DT_OIDC_ENABLED", "value": "true"},
+				{"name": "DT_OIDC_ISSUER", "value": "http://dex.dependency-track.svc.cluster.local:5556/dex"},
+			},
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("encode DependencyTrack Helm values: %w", err)
@@ -327,6 +512,12 @@ func InstallDependencyTrack() error {
 	}
 	if err := valuesFile.Close(); err != nil {
 		return fmt.Errorf("close DependencyTrack Helm values: %w", err)
+	}
+
+	// Provision Dex OIDC provider so the issuer is resolvable before DT
+	// boots and fetches its well-known OIDC metadata.
+	if err := ProvisionDex(); err != nil {
+		return fmt.Errorf("provision dex: %w", err)
 	}
 
 	installCmd := exec.Command("helm", "upgrade", "--install", "my-dependency-track",
@@ -389,6 +580,27 @@ func IsDependencyTrackReady() bool {
 	return cmd.Run() == nil
 }
 
+// VerifyOIDCAvailable checks whether the DependencyTrack API reports OIDC
+// as available by exec-ing into the API pod and curling GET /api/v1/oidc/available.
+// Prints the result to GinkgoWriter; returns false (halting the suite in
+// BeforeSuite) when OIDC is not yet wired up, preventing misleading flake.
+func VerifyOIDCAvailable() bool {
+	cmd := exec.Command("kubectl", "exec",
+		"deployment/my-dependency-track-api-server",
+		"--namespace", "dependency-track",
+		"--", "curl", "--silent", "--max-time", "5",
+		"http://127.0.0.1:8080/api/v1/oidc/available")
+	out, err := Run(cmd)
+	if err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "VerifyOIDCAvailable: probe failed: %v\n", err)
+		return false
+	}
+	trimmed := strings.TrimSpace(out)
+	available := trimmed == "true"
+	_, _ = fmt.Fprintf(GinkgoWriter, "VerifyOIDCAvailable: oidc.available=%s (available=%v)\n", trimmed, available)
+	return available
+}
+
 // InstallOrUpgradeDependencyTrack installs PostgreSQL and DependencyTrack if they
 // are not already present.  When DT is already running (detected via API probe)
 // this is a no-op so that preserved clusters skip the expensive install step.
@@ -404,6 +616,14 @@ func InstallOrUpgradeDependencyTrack() error {
 // UninstallDependencyTrack removes the DependencyTrack Helm release and namespace.
 func UninstallDependencyTrack() {
 	_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling DependencyTrack...\\n")
+
+	// Clean up Dex OIDC provider resources.
+	_, _ = Run(exec.Command("kubectl", "delete", "deployment", "dex",
+		"-n", "dependency-track", "--ignore-not-found=true"))
+	_, _ = Run(exec.Command("kubectl", "delete", "service", "dex",
+		"-n", "dependency-track", "--ignore-not-found=true"))
+	_, _ = Run(exec.Command("kubectl", "delete", "configmap", "dex-config",
+		"-n", "dependency-track", "--ignore-not-found=true"))
 
 	// Uninstall Helm release.
 	uninstallCmd := exec.Command("helm", "uninstall", "my-dependency-track", "--namespace", "dependency-track")
