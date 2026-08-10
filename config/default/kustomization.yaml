@@ -41,6 +41,13 @@ patches:
   target:
     kind: Deployment
 
+# [WEBHOOK] Mount the Team validating webhook serving cert into the manager
+# Deployment so the webhook server can serve TLS on :9443 (MEM023). Kept as an
+# independent patch so the webhook resources themselves stay opt-in.
+- path: webhook_server_cert_mount_patch.yaml
+  target:
+    kind: Deployment
+
 # Uncomment the patches line if you enable Metrics and CertManager
 # [METRICS-WITH-CERTS] To enable metrics protected with certManager, uncomment the following line.
 # This patch will protect the metrics with certManager self-signed certs.

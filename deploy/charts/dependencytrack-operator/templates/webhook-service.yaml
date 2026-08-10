@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dependencytrack-operator.fullname" . }}-controller-manager-webhook
+  labels:
+    control-plane: controller-manager
+  {{- include "dependencytrack-operator.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ include "dependencytrack-operator.name" . }}
+    control-plane: controller-manager
+    {{- include "dependencytrack-operator.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: 9443
+      protocol: TCP
+      targetPort: 9443
+      name: https-webhook

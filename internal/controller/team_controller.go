@@ -18,9 +18,15 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
+	"strings"
 
+	logr "github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +43,8 @@ import (
 )
 
 const (
-	teamFinalizer = "dependencytrack.mko.dev/finalizer"
+	teamFinalizer  = "dependencytrack.mko.dev/finalizer"
+	reasonAPIError = "APIError"
 )
 
 // TeamReconciler reconciles a Team object
@@ -78,6 +85,122 @@ func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	return r.reconcileUpsert(ctx, team)
 }
 
+// lookupTeamUUIDByName returns the UUID of the DependencyTrack team whose name
+// matches the given value, or "" if no such team exists. It makes team creation
+// idempotent across reconcile interruptions (e.g. a rolling restart that occurs
+// after CreateTeam succeeds but before the UUID is persisted to status), which
+// would otherwise wedge the reconcile loop with a 409 Conflict.
+//
+// It deliberately issues a raw GET /v1/team?name= request instead of using the
+// generated dtapi TeamAPI.GetTeams list endpoint: the generated Team model marks
+// lastPasswordChange as a required field, and DependencyTrack omits it for some
+// teams (e.g. LDAP-mapped), which makes the generated list decoder reject
+// otherwise-valid responses.
+func (r *TeamReconciler) lookupTeamUUIDByName(authCtx context.Context, apiClient *dtapi.APIClient, name string) (string, error) {
+	token, _ := authCtx.Value(dtapi.ContextAccessToken).(string)
+	if token == "" {
+		return "", fmt.Errorf("no bearer token in auth context")
+	}
+	cfg := apiClient.GetConfig()
+	baseURL, err := cfg.ServerURLWithContext(authCtx, "TeamAPIService.GetTeams")
+	if err != nil {
+		return "", fmt.Errorf("resolve DependencyTrack server URL: %w", err)
+	}
+
+	u := strings.TrimRight(baseURL, "/") + "/v1/team?name=" + url.QueryEscape(name)
+	req, err := http.NewRequestWithContext(authCtx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	httpClient := cfg.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return "", nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("looking up team %q by name: %s", name, resp.Status)
+	}
+	var decoded interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return "", err
+	}
+	switch v := decoded.(type) {
+	case map[string]interface{}:
+		matchedName, _ := v["name"].(string)
+		if uuid, ok := v["uuid"].(string); ok && uuid != "" && matchedName == name {
+			return uuid, nil
+		}
+	case []interface{}:
+		for _, item := range v {
+			if m, ok := item.(map[string]interface{}); ok {
+				matchedName, _ := m["name"].(string)
+				if uuid, ok := m["uuid"].(string); ok && uuid != "" && matchedName == name {
+					return uuid, nil
+				}
+			}
+		}
+	}
+	return "", nil
+}
+
+// teamSnapshot contains only fields used during reconciliation. Dependency-Track
+// may omit lastPasswordChange from nested managed users, while the generated
+// client requires it and rejects the otherwise-valid Team response.
+type teamSnapshot struct {
+	Name        string `json:"name"`
+	UUID        string `json:"uuid"`
+	Permissions []struct {
+		Name string `json:"name"`
+	} `json:"permissions"`
+}
+
+func lookupTeamByUUID(authCtx context.Context, apiClient *dtapi.APIClient, uuid string) (*teamSnapshot, int, error) {
+	token, _ := authCtx.Value(dtapi.ContextAccessToken).(string)
+	if token == "" {
+		return nil, 0, fmt.Errorf("no bearer token in auth context")
+	}
+	cfg := apiClient.GetConfig()
+	baseURL, err := cfg.ServerURLWithContext(authCtx, "TeamAPIService.GetTeam")
+	if err != nil {
+		return nil, 0, fmt.Errorf("resolve DependencyTrack server URL: %w", err)
+	}
+	req, err := http.NewRequestWithContext(authCtx, http.MethodGet,
+		strings.TrimRight(baseURL, "/")+"/v1/team/"+url.PathEscape(uuid), nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	httpClient := cfg.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, resp.StatusCode, fmt.Errorf("DependencyTrack team lookup: %s", resp.Status)
+	}
+
+	var team teamSnapshot
+	if err := json.NewDecoder(resp.Body).Decode(&team); err != nil {
+		return nil, resp.StatusCode, fmt.Errorf("decode DependencyTrack team response: %w", err)
+	}
+	return &team, resp.StatusCode, nil
+}
+
 func (r *TeamReconciler) reconcileUpsert(ctx context.Context, team *dependencytrackv1alpha1.Team) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -93,42 +216,55 @@ func (r *TeamReconciler) reconcileUpsert(ctx context.Context, team *dependencytr
 
 	if team.Status.UUID != "" {
 		// Team may already exist — fetch it by the UUID we recorded last time.
-		existing, httpResp, err := apiClient.TeamAPI.GetTeam(authCtx, team.Status.UUID).Execute()
+		existing, statusCode, err := lookupTeamByUUID(authCtx, apiClient, team.Status.UUID)
 		switch {
 		case err == nil:
 			// Team still exists; rename if the spec changed.
 			if existing.Name != team.Spec.Name {
-				log.Info("updating team name", "uuid", existing.Uuid, "oldName", existing.Name, "newName", team.Spec.Name)
+				log.Info("updating team name", "uuid", existing.UUID, "oldName", existing.Name, "newName", team.Spec.Name)
 				updated, _, err := apiClient.TeamAPI.UpdateTeam(authCtx).Team(dtapi.Team{
 					Name: team.Spec.Name,
-					Uuid: existing.Uuid,
+					Uuid: existing.UUID,
 				}).Execute()
 				if err != nil {
-					return r.failStatus(ctx, team, "APIError", "failed to update team name: "+err.Error(), err)
+					return r.failStatus(ctx, team, "failed to update team name: "+err.Error(), err)
 				}
 				dtUUID = updated.Uuid
 			} else {
-				dtUUID = existing.Uuid
+				dtUUID = existing.UUID
 			}
-		case httpResp != nil && httpResp.StatusCode == http.StatusNotFound:
+		case statusCode == http.StatusNotFound:
 			// Team was deleted from DependencyTrack out-of-band; recreate it.
 			log.Info("team not found in DependencyTrack, recreating", "uuid", team.Status.UUID)
 		default:
-			return r.failStatus(ctx, team, "APIError", "failed to get team from DependencyTrack: "+err.Error(), err)
+			return r.failStatus(ctx, team, "failed to get team from DependencyTrack: "+err.Error(), err)
 		}
 	}
 
 	if dtUUID == "" {
-		createTeam := dtapi.Team{
-			Name: team.Spec.Name,
-		}
-		created, _, err := apiClient.TeamAPI.CreateTeam(authCtx).Team(createTeam).Execute()
+		// Interrupt-tolerant creation: a prior reconcile may have created the team
+		// in DependencyTrack but been restarted (e.g. during a rolling update) before
+		// team.Status.UUID was persisted. Adopting an existing team by name avoids a
+		// redundant CreateTeam that would 409 Conflict and wedge the reconcile loop.
+		adopted, err := r.lookupTeamUUIDByName(authCtx, apiClient, team.Spec.Name)
 		if err != nil {
-			return r.failStatus(ctx, team, "APIError", "failed to create team: "+err.Error(), err)
+			return r.failStatus(ctx, team, "failed to look up team by name: "+err.Error(), err)
 		}
-		dtUUID = created.Uuid
-		log.Info("created team in DependencyTrack", "uuid", dtUUID)
-		r.Recorder.Eventf(team, "Normal", "TeamCreated", "Created team %q in DependencyTrack (uuid=%s)", team.Spec.Name, dtUUID)
+		if adopted != "" {
+			log.Info("adopting pre-existing team by name", "name", team.Spec.Name, "uuid", adopted)
+			dtUUID = adopted
+		} else {
+			createTeam := dtapi.Team{
+				Name: team.Spec.Name,
+			}
+			created, _, err := apiClient.TeamAPI.CreateTeam(authCtx).Team(createTeam).Execute()
+			if err != nil {
+				return r.failStatus(ctx, team, "failed to create team: "+err.Error(), err)
+			}
+			dtUUID = created.Uuid
+			log.Info("created team in DependencyTrack", "uuid", dtUUID)
+			r.Recorder.Eventf(team, "Normal", "TeamCreated", "Created team %q in DependencyTrack (uuid=%s)", team.Spec.Name, dtUUID)
+		}
 	}
 
 	team.Status.UUID = dtUUID
@@ -141,6 +277,26 @@ func (r *TeamReconciler) reconcileUpsert(ctx context.Context, team *dependencytr
 	// Persist name in status for observability.
 	team.Status.Name = team.Spec.Name
 
+	// Reconcile OIDC group mappings when the spec opts in. Teams without an
+	// OIDC stanza issue NO DependencyTrack API traffic and stay on baseline
+	// behaviour; the guard is enforced both here and inside reconcileOIDC.
+	//
+	// The generated *dtapi.APIClient is bridged through the T03 seam
+	// (dependencytrack.NewDtapiOIDCClient) here at the composition root;
+	// tests bypass the adapter by handing reconcileOIDC a minimal OIDCAClient
+	// stub directly.
+	if team.Spec.OIDC != nil {
+		api := dependencytrack.NewDtapiOIDCClient(apiClient.OidcAPI)
+		// reconcileOIDC delegates to ReconcileOIDCMappings and DeleteMappingByUuid,
+		// which the generated dtapi client authenticates only when the request
+		// context carries dtapi.ContextAccessToken. Pass authCtx (populated by
+		// ClientProvider.Get) rather than the ambient reconcile ctx, lest the
+		// OIDC calls fly without a bearer token and DT 401s them.
+		if res, err := r.reconcileOIDC(authCtx, api, team, dtUUID); err != nil || !res.IsZero() {
+			return res, err
+		}
+	}
+
 	setCondition(team, metav1.ConditionTrue, "TeamSynced", "Team successfully reconciled in DependencyTrack")
 	if err := r.Status().Update(ctx, team); err != nil {
 		return ctrl.Result{}, err
@@ -149,16 +305,110 @@ func (r *TeamReconciler) reconcileUpsert(ctx context.Context, team *dependencytr
 	return ctrl.Result{}, nil
 }
 
+/*
+	scrubOwnedOIDCMappings reclaims the OIDC group->team mapping edges this
+
+// operator authorised for `team` (recorded in team.Status.OIDC.OwnedMappings)
+// before the underlying Dependency-Track team object is torn down. Scoped to
+// OWNED edges only: shared/group objects are never cascaded, mirroring the
+// upsert-time guarantee that only binding edges are ever mutated.
+//
+// Matrix:
+//   - team.Spec.OIDC == nil        -> nil, zero API traffic (never engaged).
+//   - no owned mappings            -> nil (fast path; skips avail probe).
+//   - OIDC not provisioned (!avail)-> ErrOIDCUnavailable, NO mutations;
+//                                    caller defers+requeues w/ finalizer held.
+//   - transport error on probe     -> wrapped and bubbled.
+//   - available                    -> DELETE-MAPPING-BY-UUID per owned edge,
+//                                    fail-STOP on first error so a partial
+//                                    scrub is retried wholesale.
+//
+// ctx MUST carry the DependencyTrack bearer token (the auth context from
+// DTProvider.Get) so probe/deletes propagate authentication.
+*/
+func (r *TeamReconciler) scrubOwnedOIDCMappings(ctx context.Context, api dependencytrack.OIDCAClient, team *dependencytrackv1alpha1.Team) error {
+	// Vanilla teams opted out of OIDC entirely: zero API traffic.
+	if team.Spec.OIDC == nil {
+		return nil
+	}
+
+	owned := ownedStatusOf(team)
+	if len(owned) == 0 {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	available, err := api.IsAvailable(ctx)
+	if err != nil {
+		return fmt.Errorf("probing OIDC availability while scrubbing owned mappings for team %q: %w", team.Spec.Name, err)
+	}
+	if !available {
+		return dependencytrack.ErrOIDCUnavailable
+	}
+
+	for _, m := range owned {
+		if err := api.DeleteMappingByUuid(ctx, m.MappingUUID); err != nil {
+			log.Error(err, "failed to delete owned OIDC mapping", "mappingUuid", m.MappingUUID, "group", m.GroupName)
+			return fmt.Errorf("deleting owned OIDC mapping %q (group %q) during team deletion: %w", m.MappingUUID, m.GroupName, err)
+		}
+		log.Info("scrubbed owned OIDC mapping", "mappingUuid", m.MappingUUID, "group", m.GroupName)
+	}
+	return nil
+}
+
 func (r *TeamReconciler) reconcileDelete(ctx context.Context, team *dependencytrackv1alpha1.Team) error {
 	log := logf.FromContext(ctx)
 
-	if team.Status.UUID != "" {
-		authCtx, apiClient, err := r.DTProvider.Get(ctx)
-		if err != nil {
-			log.Error(err, "failed to authenticate with DependencyTrack during deletion")
+	owned := ownedStatusOf(team)
+	needScrub := team.Spec.OIDC != nil && len(owned) > 0
+	needTeardown := team.Status.UUID != ""
+
+	// Fast path: nothing to scrub and no team object to tear down. Strip the
+	// finalizer directly WITHOUT acquiring a DependencyTrack credential, so a
+	// vanilla/no-op deletion never forces an unnecessary auth handshake.
+	if !needScrub && !needTeardown {
+		controllerutil.RemoveFinalizer(team, teamFinalizer)
+		return r.Update(ctx, team)
+	}
+
+	// Shared acquisition: scrub or team teardown (often both) is required, so
+	// we authenticate ONCE and feed the same auth context + API client to
+	// both blocks.
+	authCtx, apiClient, err := r.DTProvider.Get(ctx)
+	if err != nil {
+		log.Error(err, "failed to authenticate with DependencyTrack during deletion")
+		return err
+	}
+
+	// Scrub owned OIDC mapping edges BEFORE destroying the team so the
+	// dependent bindings vanish ahead of the principal object. Engaged only
+	// when owned mappings exist AND the team opts into OIDC.
+	if needScrub {
+		api := dependencytrack.NewDtapiOIDCClient(apiClient.OidcAPI)
+		if err := r.scrubOwnedOIDCMappings(authCtx, api, team); err != nil {
+			if errors.Is(err, dependencytrack.ErrOIDCUnavailable) {
+				// OIDC not provisioned: retain last-seen owned mappings (do
+				// NOT clear status.OIDC), flush the advisory condition/event,
+				// and requeue with the finalizer held so the scrub retries
+				// once OIDC becomes available.
+				setCondition(team, metav1.ConditionFalse, "OIDCUnavailable",
+					fmt.Sprintf("OIDC is not provisioned; owned mappings for team %q could not be scrubbed during deletion", team.Spec.Name))
+				r.Recorder.Eventf(team, "Warning", "OIDCUnavailable",
+					"OIDC not provisioned; owned mappings for team %q left intact during deletion", team.Spec.Name)
+				_ = r.Status().Update(ctx, team)
+				return err
+			}
+			// Non-availability scrub error: structured logs already emitted
+			// inside scrubOwnedOIDCMappings. Retain the finalizer and requeue.
+			log.Error(err, "failed to scrub owned OIDC mappings during deletion", "team", team.Spec.Name)
 			return err
 		}
+		r.Recorder.Eventf(team, "Normal", "OIDCMappingRemoved",
+			"Scrubbed %d owned OIDC mapping(s) for team %q during deletion", len(owned), team.Spec.Name)
+	}
 
+	if needTeardown {
 		httpResp, err := apiClient.TeamAPI.DeleteTeam(authCtx).Team(dtapi.Team{
 			Name: team.Spec.Name,
 			Uuid: team.Status.UUID,
@@ -200,7 +450,7 @@ func (r *TeamReconciler) syncPermissions(
 	// DependencyTrack 5.0 exposes per-permission POST/DELETE operations. The
 	// generated client also contains a newer bulk PUT operation, but that is not
 	// supported by all server versions. Compute and apply a delta instead.
-	existing, _, err := apiClient.TeamAPI.GetTeam(authCtx, uuid).Execute()
+	existing, _, err := lookupTeamByUUID(authCtx, apiClient, uuid)
 	if err != nil {
 		log.Error(err, "failed to read team permissions", "uuid", uuid)
 		setCondition(team, metav1.ConditionFalse, "PermissionSyncError", "failed to read current permissions: "+err.Error())
@@ -208,7 +458,11 @@ func (r *TeamReconciler) syncPermissions(
 		return err
 	}
 
-	toAdd, toRemove, desired := permissionDelta(existing.Permissions, team.Spec.Permissions)
+	existingPermissions := make([]dtapi.Permission, 0, len(existing.Permissions))
+	for _, permission := range existing.Permissions {
+		existingPermissions = append(existingPermissions, dtapi.Permission{Name: permission.Name})
+	}
+	toAdd, toRemove, desired := permissionDelta(existingPermissions, team.Spec.Permissions)
 	for _, permission := range toAdd {
 		if _, _, err := apiClient.PermissionAPI.AddPermissionToTeam(authCtx, uuid, permission).Execute(); err != nil {
 			log.Error(err, "failed to add team permission", "uuid", uuid, "permission", permission)
@@ -239,10 +493,130 @@ func (r *TeamReconciler) syncPermissions(
 	return nil
 }
 
+// reconcileOIDC converges the OIDC group mappings backing a team onto
+// team.Spec.OIDC, anchoring the diff on team.Status.OIDC (prevOwned) so that
+// drops, reordering, and edits all converge rather than regressing to
+// additive-only provisioning. It is invoked from reconcileUpsert only when
+// team.Spec.OIDC != nil, and additionally self-guards against a nil pointer so
+// a forgotten caller guard degrades to a no-op rather than a panic.
+//
+// Adaptation to the T03 seam ([dependencytrack.dtapiAdapter]) lives at the call
+// site: the generated *dtapi.APIClient is bridged via NewDtapiOIDCClient and
+// handed to ReconcileOIDCMappings. Tests bypass the adapter entirely by
+// supplying a minimal OIDCAClient stub directly, sidestepping the dtapiAdapter
+// boundary.
+//
+// Error handling:
+//   - ErrOIDCUnavailable (OIDC not provisioned) is treated as TRANSIENT:
+//     team.Status.OIDC is left UNTOUCHED (stale owned mappings are retained
+//     conservatively) and the reconcile requeues instead of mutating the
+//     bindings the controller does not own.
+//   - Any other error faults the Ready condition and bubbles up to the caller.
+func (r *TeamReconciler) reconcileOIDC(ctx context.Context, api dependencytrack.OIDCAClient, team *dependencytrackv1alpha1.Team, teamUUID string) (ctrl.Result, error) {
+	if team.Spec.OIDC == nil {
+		// Baseline teams opt out of OIDC entirely: zero API traffic.
+		return ctrl.Result{}, nil
+	}
+
+	log := logf.FromContext(ctx)
+	prev := ownedStatusToSeam(ownedStatusOf(team))
+	mappings, err := dependencytrack.ReconcileOIDCMappings(ctx, logrLogger{l: log}, api, teamUUID, team.Spec.OIDC.Groups, prev)
+	if err != nil {
+		switch {
+		case errors.Is(err, dependencytrack.ErrOIDCUnavailable):
+			// Feature not provisioned: do NOT reassign team.Status.OIDC so the
+			// last-seen owned mappings are retained conservatively. Flush the
+			// advisory condition/event and requeue for retry.
+			setCondition(team, metav1.ConditionFalse, "OIDCUnavailable",
+				fmt.Sprintf("OIDC is not provisioned on the DependencyTrack instance; mappings for team %q left untouched", team.Spec.Name))
+			r.Recorder.Eventf(team, "Warning", "OIDCUnavailable",
+				"OIDC not provisioned; existing mappings left untouched for team %q", team.Spec.Name)
+			_ = r.Status().Update(ctx, team)
+			return ctrl.Result{Requeue: true}, err
+		default:
+			setCondition(team, metav1.ConditionFalse, "OIDCError", "failed to reconcile OIDC mappings: "+err.Error())
+			r.Recorder.Eventf(team, "Warning", "OIDCError",
+				"failed to reconcile OIDC mappings for team %q: %s", team.Spec.Name, err.Error())
+			_ = r.Status().Update(ctx, team)
+			return ctrl.Result{}, err
+		}
+	}
+
+	team.Status.OIDC = &dependencytrackv1alpha1.TeamOIDCStatus{
+		OwnedMappings: ownedMappingsToStatus(mappings),
+	}
+
+	if len(mappings) > 0 {
+		r.Recorder.Eventf(team, "Normal", "OIDCMappingCreated",
+			"Ensured %d OIDC group mapping(s) for team %q", len(mappings), team.Spec.Name)
+	} else {
+		r.Recorder.Event(team, "Normal", "OIDCMappingSkipped",
+			fmt.Sprintf("No OIDC mappings to create for team %q", team.Spec.Name))
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// ownedMappingsToStatus translates seam-owned bindings ([dependencytrack.OwnedMapping])
+// into the API-status DTOs exposed on Team.status.oidc. Kept as a pure helper so
+// the field-map contract is unit-tested independently of the generated client.
+func ownedMappingsToStatus(seam []dependencytrack.OwnedMapping) []dependencytrackv1alpha1.OwnedOIDCMapping {
+	out := make([]dependencytrackv1alpha1.OwnedOIDCMapping, 0, len(seam))
+	for _, m := range seam {
+		out = append(out, dependencytrackv1alpha1.OwnedOIDCMapping{
+			GroupName:   m.GroupName,
+			GroupUUID:   m.GroupUUID,
+			TeamUUID:    m.TeamUUID,
+			MappingUUID: m.MappingUUID,
+		})
+	}
+	return out
+}
+
+// ownedStatusOf plucks the owned-mapping rows currently held in a Team's status
+// for feeding back into the diff engine. Returns nil when status.OIDC is unset
+// so a never-reconciled team behaves identically to "previously owned nothing".
+func ownedStatusOf(team *dependencytrackv1alpha1.Team) []dependencytrackv1alpha1.OwnedOIDCMapping {
+	if team == nil || team.Status.OIDC == nil {
+		return nil
+	}
+	return team.Status.OIDC.OwnedMappings
+}
+
+// ownedStatusToSeam is the inverse of [ownedMappingsToStatus]: it materialises
+// the status-recorded bindings into the seam-owned tuples that
+// [dependencytrack.ReconcileOIDCMappings] consumes as its prevOwned anchor.
+// Empty/nil input yields nil so the diff engine observes "nothing previously
+// owned" rather than an empty-but-present ownership set.
+func ownedStatusToSeam(status []dependencytrackv1alpha1.OwnedOIDCMapping) []dependencytrack.OwnedMapping {
+	if len(status) == 0 {
+		return nil
+	}
+	out := make([]dependencytrack.OwnedMapping, 0, len(status))
+	for _, m := range status {
+		out = append(out, dependencytrack.OwnedMapping{
+			GroupName:   m.GroupName,
+			GroupUUID:   m.GroupUUID,
+			TeamUUID:    m.TeamUUID,
+			MappingUUID: m.MappingUUID,
+		})
+	}
+	return out
+}
+
+// logrLogger adapts a [logr.Logger] to the [dependencytrack.Logger] interface so
+// the OIDC seam participates in the controller's structured log stream.
+
+type logrLogger struct{ l logr.Logger }
+
+func (lg logrLogger) Printf(format string, v ...any) {
+	lg.l.Info(fmt.Sprintf(format, v...))
+}
+
 // failStatus sets a failed condition, persists the status, and returns the error so the reconcile loop requeues.
-func (r *TeamReconciler) failStatus(ctx context.Context, team *dependencytrackv1alpha1.Team, reason, msg string, cause error) (ctrl.Result, error) {
+func (r *TeamReconciler) failStatus(ctx context.Context, team *dependencytrackv1alpha1.Team, msg string, cause error) (ctrl.Result, error) {
 	logf.FromContext(ctx).Error(cause, msg)
-	setCondition(team, metav1.ConditionFalse, reason, msg)
+	setCondition(team, metav1.ConditionFalse, reasonAPIError, msg)
 	_ = r.Status().Update(ctx, team)
 	return ctrl.Result{}, cause
 }

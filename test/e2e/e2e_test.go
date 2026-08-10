@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -42,6 +43,89 @@ const metricsServiceName = "deptrack-operator-controller-manager-metrics-service
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "deptrack-operator-metrics-binding"
+
+// OIDC group-to-team mapping lifecycle probe scripts. Credentials and dynamic
+// inputs (group names, UUIDs) are streamed over stdin and are never placed in
+// command-line arguments, so no secret leaks into process listings or test logs.
+// Effective DT API paths are rooted at /api/v1: the generated dtapi client
+// (internal/dependencytrack.NewAPIClient) appends /v1/oidc/* to the /api base,
+// and the user-login endpoint is /api/v1/user/login.
+const (
+	oidcLoginPreamble = `IFS= read -r username
+IFS= read -r password
+token=$(
+  curl --fail --silent --show-error \
+    -X POST \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "username=$username" \
+    --data-urlencode "password=$password" \
+    http://127.0.0.1:8080/api/v1/user/login
+) || exit 1
+`
+	// oidcGroupByNameScript: stdin line 1 = group name. Prints EXISTS or GONE.
+	oidcGroupByNameScript = oidcLoginPreamble + `IFS= read -r group
+resp=$(curl --silent --show-error \
+  -H "Authorization: Bearer $token" \
+  "http://127.0.0.1:8080/api/v1/oidc/group?name=${group}")
+if printf '%s' "$resp" | grep -Fq '"name":"'"${group}"'"'; then
+  echo EXISTS
+else
+  echo GONE
+fi
+`
+	// oidcGroupTeamsScript: stdin line 1 = group UUID, line 2 = team UUID.
+	// Prints MAPPED if the team is mapped to the group, else NOT_MAPPED.
+	oidcGroupTeamsScript = oidcLoginPreamble + `IFS= read -r group_uuid
+IFS= read -r team_uuid
+resp=$(curl --silent --show-error \
+  -H "Authorization: Bearer $token" \
+  "http://127.0.0.1:8080/api/v1/oidc/group/${group_uuid}/team")
+if printf '%s' "$resp" | grep -Fq '"uuid":"'"${team_uuid}"'"'; then
+  echo MAPPED
+else
+  echo NOT_MAPPED
+fi
+`
+	// oidcMappingDeleteScript: stdin line 1 = mapping UUID. Prints
+	// STATUS:<http_code>; 204 means the mapping still exists, 404 means it
+	// was already scrubbed.
+	oidcMappingDeleteScript = oidcLoginPreamble + `IFS= read -r mapping_uuid
+code=$(curl --silent --show-error \
+  -o /dev/null \
+  -w '%{http_code}' \
+  -X DELETE \
+  -H "Authorization: Bearer $token" \
+  "http://127.0.0.1:8080/api/v1/oidc/mapping/${mapping_uuid}")
+echo "STATUS:${code}"
+`
+)
+
+// Templates for the OIDC Team YAML variants exercised by the lifecycle test.
+const (
+	oidcTwoGroupsTemplate = `apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Team
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  name: %s
+  oidc:
+    groups:
+      - %s
+      - %s
+`
+	oidcSingleGroupTemplate = `apiVersion: dependencytrack.mko.dev/v1alpha1
+kind: Team
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  name: %s
+  oidc:
+    groups:
+      - %s
+`
+)
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -131,6 +215,16 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(podOutput).NotTo(BeEmpty())
 		controllerPodName = podOutput
+
+		// Overlay the up-to-date Team CRD schema so the live cluster recognises
+		// spec.oidc / status.oidc. The shipped Helm chart CRD predates the
+		// OIDC feature (S01), so without this overlay the API server rejects
+		// Team CRs carrying spec.oidc.groups. Applied AFTER the operator Helm
+		// install so the rich schema wins over the chart's bundled CRD.
+		By("applying the up-to-date Team CRD schema (spec.oidc / status.oidc)")
+		crdPath := filepath.Join(projectDir, "config/crd/bases/dependencytrack.mko.dev_teams.yaml")
+		_, err = utils.Run(exec.Command("kubectl", "apply", "-f", crdPath))
+		Expect(err).NotTo(HaveOccurred(), "Failed to apply up-to-date Team CRD schema")
 	})
 
 	// After each test, check for failures and collect logs, events,
@@ -981,6 +1075,215 @@ spec:
 					g.Expect(err).To(HaveOccurred(), "Policy should be deleted")
 				}
 				Eventually(verifyPolicyGone, 2*time.Minute).Should(Succeed())
+			})
+		})
+
+		// OIDC group-to-team mapping lifecycle: end-to-end proof that the S02-S04
+		// ownership guarantees (diff-reconcile, conservative-restore, finalizer-scrub)
+		// hold through the controller, the generated dtapi client, and a live
+		// Dependency-Track 5.x + Dex fixture. Edges (mappings) are created, one
+		// is revoked while its group object is preserved, and finally the Team
+		// is deleted and every owned edge is scrubbed.
+		Context("OIDC group-to-team mapping lifecycle with real DependencyTrack", func() {
+			const (
+				oidcTeamCRD    = "oidc-mapping-lifecycle"
+				oidcGroupNameA = "oidc-admins"
+				oidcGroupNameB = "oidc-devs"
+			)
+
+			AfterEach(func() {
+				By(fmt.Sprintf("cleaning up OIDC Team %q (finalizer scrubs leftover mappings on failure)", oidcTeamCRD))
+				cmd := exec.Command("kubectl", "delete", "team", oidcTeamCRD, "-n", namespace,
+					"--ignore-not-found=true")
+				_, _ = utils.Run(cmd)
+			})
+
+			// applyTeamYAML renders the selected Team template and streams it to
+			// `kubectl apply -f -`. Build the formatting arguments to match each
+			// template exactly: passing groupB to the single-group template appends
+			// Go's `%!(EXTRA string=...)` diagnostic and produces invalid YAML.
+			applyTeamYAML := func(template, groupA, groupB string) {
+				args := []any{oidcTeamCRD, namespace, oidcTeamCRD, groupA}
+				if groupB != "" {
+					args = append(args, groupB)
+				}
+				yamlStr := fmt.Sprintf(template, args...)
+				cmd := exec.Command("kubectl", "apply", "-f", "-")
+				cmd.Stdin = strings.NewReader(yamlStr)
+				_, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to apply Team YAML")
+			}
+
+			type oidcOwnedMapping struct {
+				GroupName   string `json:"groupName"`
+				GroupUUID   string `json:"groupUuid"`
+				TeamUUID    string `json:"teamUuid"`
+				MappingUUID string `json:"mappingUuid"`
+			}
+			type teamStatusView struct {
+				Status struct {
+					UUID string `json:"uuid"`
+					OIDC *struct {
+						OwnedMappings []oidcOwnedMapping `json:"ownedMappings"`
+					} `json:"oidc"`
+				} `json:"status"`
+			}
+
+			getTeamStatus := func() teamStatusView {
+				js, err := utils.Run(exec.Command("kubectl", "get", "team", oidcTeamCRD, "-n", namespace, "-o", "json"))
+				Expect(err).NotTo(HaveOccurred())
+				var tv teamStatusView
+				Expect(json.Unmarshal([]byte(js), &tv)).To(Succeed())
+				return tv
+			}
+
+			ownedMappings := func() []oidcOwnedMapping {
+				tv := getTeamStatus()
+				if tv.Status.OIDC == nil {
+					return nil
+				}
+				return tv.Status.OIDC.OwnedMappings
+			}
+
+			findMapping := func(group string) oidcOwnedMapping {
+				for _, m := range ownedMappings() {
+					if m.GroupName == group {
+						return m
+					}
+				}
+				Fail(fmt.Sprintf("owned mapping for group %q not found in status", group))
+				return oidcOwnedMapping{}
+			}
+
+			// runOIDCAPI streams credentials + dynamic inputs over stdin to a credential-safe
+			// probe script in the DependencyTrack API pod, mirroring runPolicyAPI so that no
+			// secret ever appears in argv or diagnostic output. Scripts always exit 0 and emit
+			// a textual marker (EXISTS/GONE/MAPPED/NOT_MAPPED/STATUS:<code>) so negative
+			// assertions (e.g. a 404 on a scrubbed mapping) do not trip utils.Run's error path.
+			runOIDCAPI := func(inputs []string, script string) string {
+				secretJSON, err := utils.Run(exec.Command("kubectl", "get", "secret", "deptrack-credentials",
+					"-n", namespace, "-o", "json"))
+				Expect(err).NotTo(HaveOccurred())
+				var credentials struct {
+					Data map[string][]byte `json:"data"`
+				}
+				Expect(json.Unmarshal([]byte(secretJSON), &credentials)).To(Succeed())
+				Expect(credentials.Data).To(HaveKey("username"))
+				Expect(credentials.Data).To(HaveKey("password"))
+
+				stdin := bytes.NewBuffer(nil)
+				_, _ = stdin.Write(credentials.Data["username"])
+				_ = stdin.WriteByte('\n')
+				_, _ = stdin.Write(credentials.Data["password"])
+				_ = stdin.WriteByte('\n')
+				for _, in := range inputs {
+					_, _ = stdin.WriteString(in)
+					_ = stdin.WriteByte('\n')
+				}
+
+				cmd := exec.Command("kubectl", "exec", "-i", "deployment/my-dependency-track-api-server",
+					"-n", "dependency-track", "--", "sh", "-c", script)
+				cmd.Stdin = stdin
+				output, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "DependencyTrack OIDC API probe failed")
+				return output
+			}
+
+			groupExists := func(group string) bool {
+				return strings.Contains(runOIDCAPI([]string{group}, oidcGroupByNameScript), "EXISTS")
+			}
+			isTeamMappedToGroup := func(groupUUID, teamUUID string) bool {
+				return strings.Contains(runOIDCAPI([]string{groupUUID, teamUUID}, oidcGroupTeamsScript), "MAPPED")
+			}
+			mappingHTTPStatus := func(mappingUUID string) string {
+				out := runOIDCAPI([]string{mappingUUID}, oidcMappingDeleteScript)
+				if idx := strings.Index(out, "STATUS:"); idx >= 0 {
+					return strings.TrimSpace(out[idx+len("STATUS:"):])
+				}
+				return strings.TrimSpace(out)
+			}
+
+			It("converges the OIDC group-to-team mapping lifecycle against real DependencyTrack", func() {
+				// (a) Create with two groups -----------------------------------------------
+				By("applying a Team with spec.oidc.groups=['oidc-admins','oidc-devs']")
+				applyTeamYAML(oidcTwoGroupsTemplate, oidcGroupNameA, oidcGroupNameB)
+				By("forcing an operator reconcile of the Team (annotation trigger)")
+				_, _ = utils.Run(exec.Command("kubectl", "annotate", "team", oidcTeamCRD,
+					"-n", namespace, "reconcile.trigger=go", "--overwrite"))
+
+				By("polling status.oidc.ownedMappings to reach 2 entries")
+				Eventually(func(g Gomega) {
+					g.Expect(ownedMappings()).To(HaveLen(2))
+				}, 5*time.Minute, 5*time.Second).Should(Succeed())
+
+				tv := getTeamStatus()
+				Expect(tv.Status.UUID).NotTo(BeEmpty(), "Team should have a DependencyTrack UUID in status")
+				teamUUID := tv.Status.UUID
+				adminMap := findMapping(oidcGroupNameA)
+				devMap := findMapping(oidcGroupNameB)
+				Expect(adminMap.MappingUUID).NotTo(BeEmpty())
+				Expect(devMap.MappingUUID).NotTo(BeEmpty())
+
+				By("probing DependencyTrack: both OIDC groups exist")
+				Expect(groupExists(oidcGroupNameA)).To(BeTrue(), "oidc-admins group must exist in DependencyTrack")
+				Expect(groupExists(oidcGroupNameB)).To(BeTrue(), "oidc-devs group must exist in DependencyTrack")
+
+				By("probing DependencyTrack: both groups map this team")
+				Expect(isTeamMappedToGroup(adminMap.GroupUUID, teamUUID)).To(BeTrue(),
+					"oidc-admins must map the team")
+				Expect(isTeamMappedToGroup(devMap.GroupUUID, teamUUID)).To(BeTrue(),
+					"oidc-devs must map the team")
+
+				// (b) Shrink to a single group --------------------------------------------
+				By("patching the Team to spec.oidc.groups=['oidc-admins']")
+				applyTeamYAML(oidcSingleGroupTemplate, oidcGroupNameA, "")
+
+				By("polling status.oidc.ownedMappings to reach 1 entry anchored on oidc-admins")
+				var retained oidcOwnedMapping
+				Eventually(func(g Gomega) {
+					ms := ownedMappings()
+					g.Expect(ms).To(HaveLen(1))
+					retained = ms[0]
+					g.Expect(retained.GroupName).To(Equal(oidcGroupNameA))
+				}, 5*time.Minute, 5*time.Second).Should(Succeed())
+				Expect(retained.MappingUUID).To(Equal(adminMap.MappingUUID),
+					"a shrunk binding must be retained verbatim, not re-keyed")
+
+				By("probing DependencyTrack: oidc-admins mapping still present")
+				Expect(isTeamMappedToGroup(adminMap.GroupUUID, teamUUID)).To(BeTrue(),
+					"oidc-admins mapping must survive the shrink")
+
+				By("probing DependencyTrack: oidc-devs mapping was scrubbed (DELETE returns 404)")
+				code := mappingHTTPStatus(devMap.MappingUUID)
+				Expect(code).To(Equal("404"),
+					"scrubbed mapping must 404; got %q (residual binding indicates a scrub defect)", code)
+
+				By("probing DependencyTrack: oidc-devs group object persists (edges, not principals, are managed)")
+				Expect(groupExists(oidcGroupNameB)).To(BeTrue(),
+					"shared OIDC group object must survive mapping removal")
+
+				// (c) Delete the team ------------------------------------------------------
+				By("deleting the Team CR")
+				_, err := utils.Run(exec.Command("kubectl", "delete", "team", oidcTeamCRD, "-n", namespace))
+				Expect(err).NotTo(HaveOccurred(), "Failed to delete Team")
+
+				By("waiting for the Team to be garbage-collected (finalizer scrubbed owned mappings)")
+				Eventually(func(g Gomega) {
+					err := exec.Command("kubectl", "get", "team", oidcTeamCRD, "-n", namespace).Run()
+					g.Expect(err).To(HaveOccurred(), "Team should be deleted")
+				}, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+				By("probing DependencyTrack: all owned mappings scrubbed (404 on each)")
+				Expect(mappingHTTPStatus(adminMap.MappingUUID)).To(Equal("404"),
+					"owner mapping must be scrubbed on team deletion")
+				Expect(mappingHTTPStatus(devMap.MappingUUID)).To(Equal("404"),
+					"former mapping must remain scrubbed on team deletion")
+
+				By("probing DependencyTrack: both group objects persist after team deletion")
+				Expect(groupExists(oidcGroupNameA)).To(BeTrue(),
+					"oidc-admins group object must persist after team deletion")
+				Expect(groupExists(oidcGroupNameB)).To(BeTrue(),
+					"oidc-devs group object must persist after team deletion")
 			})
 		})
 	})

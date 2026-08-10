@@ -46,6 +46,26 @@ spec:
               name:
                 description: Name of the team to create.
                 type: string
+              oidc:
+                description: |-
+                  OIDC configures OpenID Connect group mapping for this team. It is a
+                  pointer so that a nil value is distinguishable from an empty Groups
+                  slice; the controller treats nil as "OIDC management disabled" and
+                  therefore skips all OIDC API calls (see T04).
+                  Minimum-cardinality / membership validation is deliberately deferred to
+                  the admission webhook (see T02) rather than encoded as a CRD enum, so
+                  that arbitrary upstream group-name casing is accepted verbatim.
+                properties:
+                  groups:
+                    description: |-
+                      Groups is the list of OIDC group names to map to this team. Entries
+                      are compared verbatim against upstream Identity Provider claims: casing
+                      is intentionally preserved (no normalization happens in the API types)
+                      so operators retain full control over matching semantics.
+                    items:
+                      type: string
+                    type: array
+                type: object
               permissions:
                 description: |-
                   Permissions is an ordered list of permission names to assign to this team.
@@ -123,6 +143,40 @@ spec:
               name:
                 description: Name records the name that was last synced to DependencyTrack.
                 type: string
+              oidc:
+                description: |-
+                  OIDC reflects the observed OIDC-to-team mapping state. A nil pointer
+                  means the controller has not yet reconciled OIDC for this team;
+                  an empty OwnedMappings slice confirms that no mappings exist.
+                properties:
+                  ownedMappings:
+                    description: |-
+                      OwnedMappings enumerates the OIDC-to-team mappings currently owned by
+                      this team in DependencyTrack.
+                    items:
+                      description: OwnedOIDCMapping describes a single OIDC-to-Team
+                        mapping owned by a Team.
+                      properties:
+                        groupName:
+                          description: |-
+                            GroupName is the OIDC group name as delivered by the Identity Provider.
+                            Stored verbatim, case-unaltered.
+                          type: string
+                        groupUuid:
+                          description: GroupUUID is the DependencyTrack UUID of the
+                            OIDC group.
+                          type: string
+                        mappingUuid:
+                          description: MappingUUID is the DependencyTrack UUID of
+                            the OIDC group->team mapping.
+                          type: string
+                        teamUuid:
+                          description: TeamUUID is the DependencyTrack UUID of the
+                            owning team.
+                          type: string
+                      type: object
+                    type: array
+                type: object
               permissions:
                 description: |-
                   Permissions tracks the permissions last synced to DependencyTrack.

@@ -35,6 +35,26 @@ type TeamSpec struct {
 	// clear all permissions.
 	// +kubebuilder:validation:Optional
 	Permissions []string `json:"permissions,omitempty"`
+
+	// OIDC configures OpenID Connect group mapping for this team. It is a
+	// pointer so that a nil value is distinguishable from an empty Groups
+	// slice; the controller treats nil as "OIDC management disabled" and
+	// therefore skips all OIDC API calls (see T04).
+	// Minimum-cardinality / membership validation is deliberately deferred to
+	// the admission webhook (see T02) rather than encoded as a CRD enum, so
+	// that arbitrary upstream group-name casing is accepted verbatim.
+	// +kubebuilder:validation:Optional
+	OIDC *TeamOIDCConfig `json:"oidc,omitempty"`
+}
+
+// TeamOIDCConfig holds the desired OIDC group-mapping configuration for a Team.
+type TeamOIDCConfig struct {
+	// Groups is the list of OIDC group names to map to this team. Entries
+	// are compared verbatim against upstream Identity Provider claims: casing
+	// is intentionally preserved (no normalization happens in the API types)
+	// so operators retain full control over matching semantics.
+	// +kubebuilder:validation:Optional
+	Groups []string `json:"groups,omitempty"`
 }
 
 // TeamStatus defines the observed state of Team.
@@ -52,6 +72,36 @@ type TeamStatus struct {
 
 	// Name records the name that was last synced to DependencyTrack.
 	Name string `json:"name,omitempty"`
+
+	// OIDC reflects the observed OIDC-to-team mapping state. A nil pointer
+	// means the controller has not yet reconciled OIDC for this team;
+	// an empty OwnedMappings slice confirms that no mappings exist.
+	// +kubebuilder:validation:Optional
+	OIDC *TeamOIDCStatus `json:"oidc,omitempty"`
+}
+
+// OwnedOIDCMapping describes a single OIDC-to-Team mapping owned by a Team.
+type OwnedOIDCMapping struct {
+	// GroupName is the OIDC group name as delivered by the Identity Provider.
+	// Stored verbatim, case-unaltered.
+	GroupName string `json:"groupName,omitempty"`
+
+	// GroupUUID is the DependencyTrack UUID of the OIDC group.
+	GroupUUID string `json:"groupUuid,omitempty"`
+
+	// TeamUUID is the DependencyTrack UUID of the owning team.
+	TeamUUID string `json:"teamUuid,omitempty"`
+
+	// MappingUUID is the DependencyTrack UUID of the OIDC group->team mapping.
+	MappingUUID string `json:"mappingUuid,omitempty"`
+}
+
+// TeamOIDCStatus reflects the observed OIDC mapping state for a Team.
+type TeamOIDCStatus struct {
+	// OwnedMappings enumerates the OIDC-to-team mappings currently owned by
+	// this team in DependencyTrack.
+	// +kubebuilder:validation:Optional
+	OwnedMappings []OwnedOIDCMapping `json:"ownedMappings,omitempty"`
 }
 
 // +kubebuilder:object:root=true
