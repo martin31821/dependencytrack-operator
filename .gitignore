@@ -72,3 +72,5 @@ vendor/
 coverage/
 .cache/
 tmp/
+
+.direnv
