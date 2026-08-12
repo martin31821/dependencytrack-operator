@@ -154,6 +154,11 @@ var _ = Describe("Manager", Ordered, func() {
 		dtURL := utils.DependencyTrackHost()
 		_, _ = fmt.Fprintf(GinkgoWriter, "DependencyTrack URL: %s\n", dtURL)
 
+		// Provision cert-manager before the operator chart so its Certificate/
+		// Issuer CRs reconcile and cainjector populates the webhook caBundle.
+		By("provisioning cert-manager for webhook TLS")
+		Expect(utils.ProvisionCertManager()).To(Succeed(), "Failed to provision cert-manager")
+
 		// When the cluster is preserved between runs (E2E_SKIP_CLUSTER_TEARDOWN),
 		// skip the fresh install and instead upgrade the existing operator release.
 		// The image has already been built and loaded in BeforeSuite.
@@ -225,6 +230,26 @@ var _ = Describe("Manager", Ordered, func() {
 		crdPath := filepath.Join(projectDir, "config/crd/bases/dependencytrack.mko.dev_teams.yaml")
 		_, err = utils.Run(exec.Command("kubectl", "apply", "-f", crdPath))
 		Expect(err).NotTo(HaveOccurred(), "Failed to apply up-to-date Team CRD schema")
+
+		By("verifying cert-manager issued the webhook serving certificate")
+		assertWebhookServingCertPopulated := func(g Gomega) {
+			crt, cerr := utils.Run(exec.Command("kubectl", "get", "secret",
+				"deptrack-operator-webhook-server-cert", "-n", namespace,
+				"-o", "jsonpath={.data.tls\\.crt}"))
+			g.Expect(cerr).NotTo(HaveOccurred())
+			g.Expect(crt).NotTo(BeEmpty(), "serving cert tls.crt missing; cert-manager did not issue")
+			key, kerr := utils.Run(exec.Command("kubectl", "get", "secret",
+				"deptrack-operator-webhook-server-cert", "-n", namespace,
+				"-o", "jsonpath={.data.tls\\.key}"))
+			g.Expect(kerr).NotTo(HaveOccurred())
+			g.Expect(key).NotTo(BeEmpty(), "serving cert tls.key missing")
+			bundle, berr := utils.Run(exec.Command("kubectl", "get",
+				"validatingwebhookconfigurations", "deptrack-operator-validator",
+				"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}"))
+			g.Expect(berr).NotTo(HaveOccurred())
+			g.Expect(bundle).NotTo(BeEmpty(), "ValidatingWebhookConfiguration caBundle is empty; cainjector did not inject")
+		}
+		Eventually(assertWebhookServingCertPopulated).Should(Succeed())
 	})
 
 	// After each test, check for failures and collect logs, events,

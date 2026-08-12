@@ -809,4 +809,50 @@ func DeleteKindCluster() {
 	_, _ = fmt.Fprintf(GinkgoWriter, "Kind cluster %q deleted.\n", cluster)
 }
 
+const certManagerVersion = "v1.14.5"
+const certManagerManifestURL = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
+
+// ProvisionCertManager installs cert-manager into the cluster so the operator
+// chart's Certificate/Issuer CRs reconcile before the webhook serves. Skipped
+// when CERT_MANAGER_INSTALL_SKIP=true (mirrors the e2e Makefile contract).
+func ProvisionCertManager() error {
+	if os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true" {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Skipping cert-manager install (CERT_MANAGER_INSTALL_SKIP=true).\n")
+		return nil
+	}
+	_, _ = fmt.Fprintf(GinkgoWriter, "Installing cert-manager %s...\n", certManagerVersion)
+	url := fmt.Sprintf(certManagerManifestURL, certManagerVersion)
+	if _, err := Run(exec.Command("kubectl", "apply", "-f", url)); err != nil {
+		return fmt.Errorf("apply cert-manager manifest: %w", err)
+	}
+	if err := waitForCRD("certificates.cert-manager.io", "2m"); err != nil {
+		return fmt.Errorf("cert-manager CRD not ready: %w", err)
+	}
+	for _, dep := range []string{"cert-manager", "cert-manager-cainjector", "cert-manager-webhook"} {
+		wait := exec.Command("kubectl", "rollout", "status", "deployment/"+dep,
+			"-n", "cert-manager", "--timeout", "2m")
+		if _, err := Run(wait); err != nil {
+			return fmt.Errorf("cert-manager deployment %s not ready: %w", dep, err)
+		}
+	}
+	return nil
+}
+
+// UninstallCertManager removes cert-manager from the cluster (idempotent).
+func UninstallCertManager() {
+	url := fmt.Sprintf(certManagerManifestURL, certManagerVersion)
+	_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling cert-manager...\n")
+	_, _ = Run(exec.Command("kubectl", "delete", "-f", url))
+}
+
+// waitForCRD polls until the named CRD reaches the Established condition or times out.
+func waitForCRD(name, timeout string) error {
+	cmd := exec.Command("kubectl", "wait", "--for=condition=Established",
+		"crd", name, "--timeout", timeout)
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("waiting for CRD %s: %w", name, err)
+	}
+	return nil
+}
+
 // UncommentCode searches for target in the file and remove the comment prefix

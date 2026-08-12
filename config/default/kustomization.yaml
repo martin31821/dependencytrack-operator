@@ -21,9 +21,10 @@ resources:
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
 # crd/kustomization.yaml
 - ../webhook
-# [WEBHOOK] Self-signed webhook TLS certificate (kustomize secretGenerator).
-# Certs are generated at build time by hack/generate-webhook-certs.sh.
-- ../certs
+# [CERTMANAGER] Webhook serving TLS: self-signed Issuer + Certificate published
+# into the webhook-server-cert Secret consumed by the manager Deployment and
+# the ValidatingWebhookConfiguration caBundle (wired via replacements below).
+- ../certmanager
 # [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER'. 'WEBHOOK' components are required.
 #- ../certmanager
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
@@ -56,6 +57,43 @@ patches:
 - path: manager_webhook_patch.yaml
   target:
     kind: Deployment
+
+# [CERTMANAGER] Delegate ValidatingWebhookConfiguration.caBundle population to
+# cert-manager's cainjector by annotating it with the serving Secret that the
+# Certificate (above) publishes. Sources namespace + secretName from the
+# Certificate so the built manifest agrees with the volume the manager mounts
+# (webhook-server-cert) and the Helm chart's inject-ca-from annotation.
+replacements:
+  - source:
+      kind: Certificate
+      group: cert-manager.io
+      version: v1
+      name: webhook-server-cert
+      fieldPath: metadata.namespace
+    targets:
+      - select:
+          kind: ValidatingWebhookConfiguration
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: "/"
+          index: 0
+          create: true
+  - source:
+      kind: Certificate
+      group: cert-manager.io
+      version: v1
+      name: webhook-server-cert
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: ValidatingWebhookConfiguration
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: "/"
+          index: 1
+          create: true
 
 # Uncomment the patches line if you enable Metrics and CertManager
 # [METRICS-WITH-CERTS] To enable metrics protected with certManager, uncomment the following line.
