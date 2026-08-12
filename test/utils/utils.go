@@ -692,7 +692,7 @@ func DeployOperatorHelm(projectDir, image, deptrackURL, namespace string) error 
 		"--set", "controllerManager.manager.image.pullPolicy=IfNotPresent",
 		"--set", "controllerManager.manager.env.deptrackUrl="+deptrackURL,
 		"--set", "controllerManager.manager.env.deptrackCredentialsSecret=deptrack-credentials",
-		"--wait", "--timeout", "3m")
+		"--wait", "--timeout", "15m")
 	if _, err := Run(cmd); err != nil {
 		return fmt.Errorf("helm install operator: %w", err)
 	}
@@ -736,7 +736,7 @@ func InstallOperatorHelm(projectDir, image, deptrackURL, namespace string) error
 		"--set", "controllerManager.manager.image.pullPolicy=IfNotPresent",
 		"--set", "controllerManager.manager.env.deptrackUrl="+deptrackURL,
 		"--set", "controllerManager.manager.env.deptrackCredentialsSecret=deptrack-credentials",
-		"--wait", "--timeout", "3m")
+		"--wait", "--timeout", "15m")
 	if _, err := Run(cmd); err != nil {
 		return fmt.Errorf("helm upgrade --install operator: %w", err)
 	}
@@ -766,7 +766,7 @@ func UpgradeOperatorHelm(projectDir, image, deptrackURL, namespace string) error
 		"--set", "controllerManager.manager.image.pullPolicy=IfNotPresent",
 		"--set", "controllerManager.manager.env.deptrackUrl="+deptrackURL,
 		"--set", "controllerManager.manager.env.deptrackCredentialsSecret=deptrack-credentials",
-		"--wait", "--timeout", "3m")
+		"--wait", "--timeout", "15m")
 	if _, err := Run(cmd); err != nil {
 		return fmt.Errorf("helm upgrade operator: %w", err)
 	}

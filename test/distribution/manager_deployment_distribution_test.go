@@ -195,4 +195,29 @@ func TestManagerWebhookCertMounted(t *testing.T) {
 	if bytes.Contains([]byte(whcS), []byte("caBundle:")) {
 		t.Error("ValidatingWebhookConfiguration still embeds a value-driven caBundle block; expected cainjector injection only")
 	}
+
+	// Guard: the VWC clientConfig.service.name MUST resolve to the chart's
+	// webhook Service ('deptrack-operator-webhook-service'). A misspelled
+	// variant (e.g. 'deptract-...') leaves the Service unreferenced, so the
+	// API server returns 'service not found' on every validating webhook
+	// call and Team CR admission silently fails. Regression guard for MEM070.
+	if !bytes.Contains(whcRaw, []byte("name: deptrack-operator-webhook-service")) {
+		t.Error("ValidatingWebhookConfiguration clientConfig.service.name is not 'deptrack-operator-webhook-service'")
+	}
+	if !bytes.Contains(whcRaw, []byte("namespace: {{ .Release.Namespace }}")) {
+		t.Error("ValidatingWebhookConfiguration clientConfig.service.namespace is not '{{ .Release.Namespace }}'")
+	}
+
+	// Guard: the webhook Service must listen on port 443 — the default the
+	// VWC clientConfig.service.port falls back to when unspecified. A service
+	// on any other port without an explicit VWC port yields 'no service port
+	// 443 found' and silently breaks Team CR admission.
+	chartDir := filepath.Join(root, "deploy", "charts", "dependencytrack-operator")
+	valuesBytes, verr := os.ReadFile(filepath.Join(chartDir, "values.yaml"))
+	if verr != nil {
+		t.Fatalf("read values.yaml: %v", verr)
+	}
+	if !bytes.Contains(valuesBytes, []byte("port: 443")) {
+		t.Error("webhookService.ports must use port: 443 to match the VWC clientConfig default")
+	}
 }

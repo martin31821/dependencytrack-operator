@@ -1,7 +1,7 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: deptrack-operator-validating-webhook-configuration
+  name: deptrack-operator-validator
   annotations:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/deptrack-operator-webhook-server-cert
   labels:
@@ -11,8 +11,8 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
-      namespace: system
+      name: deptrack-operator-webhook-service
+      namespace: {{ .Release.Namespace }}
       path: /validate-dependencytrack-mko-dev-v1alpha1-team
   failurePolicy: Fail
   name: team.validating.dependencytrack.mko.dev

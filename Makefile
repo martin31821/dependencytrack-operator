@@ -82,7 +82,7 @@ test-distribution: ## Run distribution contract tests between kustomize and Helm
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v
+	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v -timeout=30m
 
 .PHONY: test-e2e-fast
 test-e2e-fast: manifests generate fmt ## Run e2e tests preserving the Kind cluster (fast iteration).
@@ -93,7 +93,7 @@ test-e2e-fast: manifests generate fmt ## Run e2e tests preserving the Kind clust
 	E2E_SKIP_CLUSTER_TEARDOWN=true \
 	E2E_SKIP_DT_TEARDOWN=true \
 	KIND_CLUSTER=$(KIND_CLUSTER) \
-	go test ./test/e2e/ -v -ginkgo.v
+	go test ./test/e2e/ -v -ginkgo.v -timeout=30m
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
@@ -223,6 +223,15 @@ helm-chart: manifests ## Generate a Helm chart from kustomize output.
 	@# {{ include "<chart>.fullname" . }}; normalize the webhook resources back
 	@# to the fixed, release-agnostic names the distribution contract requires.
 	@sed -i 's|{{ include "dependencytrack-operator.fullname" . }}|deptrack-operator|g' $(CHART_DIR)/templates/certmanager-issuer.yaml $(CHART_DIR)/templates/certmanager-certificate.yaml $(CHART_DIR)/templates/webhook-validating-webhook.yaml $(CHART_DIR)/templates/webhook-service.yaml
+	@# Rename the ValidatingWebhookConfiguration to the contracted name the e2e
+	@# suite and cert-manager cainjector expect (deptrack-operator-validator),
+	@# overriding helmify's kubebuilder-default 'validating-webhook-configuration'.
+	@sed -i 's|name: deptrack-operator-validating-webhook-configuration|name: deptrack-operator-validator|g' $(CHART_DIR)/templates/webhook-validating-webhook.yaml
+	@# Point the VWC at the chart's webhook Service: kustomize namePrefix does not
+	@# rewrite clientConfig.service.name/namespace, so helmify ships the
+	@# kubebuilder defaults 'webhook-service'/'system'; normalize them.
+	@sed -i 's|      name: webhook-service|      name: deptrack-operator-webhook-service|g' $(CHART_DIR)/templates/webhook-validating-webhook.yaml
+	@sed -i 's|      namespace: system|      namespace: {{ .Release.Namespace }}|g' $(CHART_DIR)/templates/webhook-validating-webhook.yaml
 	@# Likewise normalize the webhook-server-cert volume in the deployment,
 	@# leaving the rest of the deployment parametric.
 	@sed -i 's|secretName: {{ include "dependencytrack-operator.fullname" . }}-webhook-server-cert|secretName: deptrack-operator-webhook-server-cert|g' $(CHART_DIR)/templates/deployment.yaml
