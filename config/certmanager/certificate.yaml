@@ -1,0 +1,37 @@
+---
+# Serves the Team validating webhook over HTTPS. cert-manager signs this
+# Certificate with the self-signed Issuer above and writes the serving
+# cert+CA into the Secret mounted by the manager Deployment
+# (volume: webhook-server-cert) and read by the ValidatingWebhookConfiguration's
+# inject-ca-from annotation via cainitor.
+#
+# NOTE: namePrefix only rewrites resource metadata.name, NOT spec string
+# fields. So spec.secretName and spec.issuerRef.name below are hardcoded to
+# the prefixed names so they match the namePrefixed Issuer/Certificate
+# metadata.name and the deployment volume secret. (helmify later templatizes
+# the shared "deptrack-operator-" prefix uniformly.)
+#
+# Both MUST match the Secret referenced by:
+#   - deployment.spec.volumes.webhook-server-cert.secret.secretName
+#   - VWC annotation cert-manager.io/inject-ca-from (<namespace>/<secret>)
+# The dnsNames mirror the webhook Service ("deptrack-operator-webhook-service")
+# declared in config/webhook/service.yaml so the served certificate is valid
+# for the kube-apiserver -> webhook TLS handshake.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: webhook-server-cert
+  labels:
+    control-plane: controller-manager
+spec:
+  secretName: deptrack-operator-webhook-server-cert
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  dnsNames:
+    - deptrack-operator-webhook-service
+    - deptrack-operator-webhook-service.deptrack-operator-system.svc
+    - deptrack-operator-webhook-service.deptrack-operator-system.svc.cluster.local
+  issuerRef:
+    name: deptrack-operator-self-signed-issuer
+    kind: Issuer

@@ -4,6 +4,7 @@ controllerManager:
     - --metrics-bind-address=:8443
     - --leader-elect
     - --health-probe-bind-address=:8081
+    - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
     containerSecurityContext:
       allowPrivilegeEscalation: false
       capabilities:
@@ -43,3 +44,10 @@ serviceAccount:
   automount: true
   create: true
   name: ""
+webhookService:
+  ports:
+  - name: https-webhook
+    port: 443
+    protocol: TCP
+    targetPort: 9443
+  type: ClusterIP

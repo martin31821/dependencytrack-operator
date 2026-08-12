@@ -1,26 +1,29 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: {{ include "dependencytrack-operator.fullname" . }}-validator
+  name: deptrack-operator-validator
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/deptrack-operator-webhook-server-cert
   labels:
-    control-plane: controller-manager
   {{- include "dependencytrack-operator.labels" . | nindent 4 }}
 webhooks:
-  - name: vteam.dependencytrack.mko.dev
-    admissionReviewVersions: ["v1"]
-    sideEffects: None
-    failurePolicy: Fail
-    matchPolicy: Equivalent
-    rules:
-      - apiGroups: ["dependencytrack.mko.dev"]
-        apiVersions: ["v1alpha1"]
-        operations: ["CREATE", "UPDATE"]
-        resources: ["teams"]
-        scope: "*"
-    clientConfig:
-      service:
-        name: {{ include "dependencytrack-operator.fullname" . }}-controller-manager-webhook
-        namespace: {{ .Release.Namespace }}
-        path: /validate-dependencytrack-mko-dev-v1alpha1-team
-        port: 9443
-      caBundle: {{ .Files.Get "certs/webhook.pem" | b64enc }}
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: deptrack-operator-webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /validate-dependencytrack-mko-dev-v1alpha1-team
+  failurePolicy: Fail
+  name: team.validating.dependencytrack.mko.dev
+  rules:
+  - apiGroups:
+    - dependencytrack.mko.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - teams
+  sideEffects: None

@@ -74,3 +74,9 @@ coverage/
 tmp/
 
 .direnv
+
+# ── Webhook certs (generated at build time, do not commit) ──
+config/certs/tls.crt
+config/certs/tls.key
+deploy/charts/dependencytrack-operator/certs/webhook.pem
+deploy/charts/dependencytrack-operator/certs/webhook.key

@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: deptrack-operator-webhook-server-cert
+  labels:
+  {{- include "dependencytrack-operator.labels" . | nindent 4 }}
+spec:
+  dnsNames:
+  - 'deptrack-operator-webhook-service'
+  - 'deptrack-operator-webhook-service.{{ .Release.Namespace
+    }}.svc'
+  - 'deptrack-operator-webhook-service.{{ .Release.Namespace
+    }}.svc.{{ .Values.kubernetesClusterDomain }}'
+  issuerRef:
+    kind: Issuer
+    name: 'deptrack-operator-self-signed-issuer'
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  secretName: deptrack-operator-webhook-server-cert

@@ -82,7 +82,7 @@ test-distribution: ## Run distribution contract tests between kustomize and Helm
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v
+	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v -timeout=30m
 
 .PHONY: test-e2e-fast
 test-e2e-fast: manifests generate fmt ## Run e2e tests preserving the Kind cluster (fast iteration).
@@ -93,7 +93,7 @@ test-e2e-fast: manifests generate fmt ## Run e2e tests preserving the Kind clust
 	E2E_SKIP_CLUSTER_TEARDOWN=true \
 	E2E_SKIP_DT_TEARDOWN=true \
 	KIND_CLUSTER=$(KIND_CLUSTER) \
-	go test ./test/e2e/ -v -ginkgo.v
+	go test ./test/e2e/ -v -ginkgo.v -timeout=30m
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
@@ -205,11 +205,39 @@ CHART_DIR ?= deploy/charts/dependencytrack-operator
 .PHONY: helm-chart
 helm-chart: manifests ## Generate a Helm chart from kustomize output.
 	mkdir -p $(CHART_DIR)
-	./hack/kustomize-build-with-image.sh "$(IMG)" | helmify -crd-dir $(CHART_DIR) 2>/dev/null
-	@# CRDs now live in crds/; purge any stale *-crd.yaml left by prior non-crd-dir generations.
+	@# Drop stale hand-named cert-manager templates before regenerating so
+	@# helmify never leaves orphaned duplicates (certmanager-issuer.yaml
+	@# beside helmify's self-signed-issuer.yaml).
+	@rm -f $(CHART_DIR)/templates/certmanager-issuer.yaml $(CHART_DIR)/templates/certmanager-certificate.yaml $(CHART_DIR)/templates/webhook-validating-webhook.yaml
+	@# Buffer kustomize output and only feed it to helmify on success, so a
+	@# kustomize failure can't seed an empty-stub values.yaml over the chart.
+	@tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; ./hack/kustomize-build-with-image.sh "$(IMG)" > "$$tmp" && helmify -crd-dir $(CHART_DIR) < "$$tmp" 2>/dev/null
+	@# CRDs live in crds/; purge any stale *-crd.yaml.
 	@rm -f $(CHART_DIR)/templates/*-crd.yaml
-	@# Remove duplicate hardcoded selector/template labels that conflict with helpers
+	@# Rename helmify's resource-derived files to the contracted names the
+	@# distribution tests assert on.
+	@mv $(CHART_DIR)/templates/self-signed-issuer.yaml $(CHART_DIR)/templates/certmanager-issuer.yaml
+	@mv $(CHART_DIR)/templates/webhook-server-cert.yaml $(CHART_DIR)/templates/certmanager-certificate.yaml
+	@mv $(CHART_DIR)/templates/validating-webhook-configuration.yaml $(CHART_DIR)/templates/webhook-validating-webhook.yaml
+	@# helmify templatizes the shared "deptrack-operator-" prefix as
+	@# {{ include "<chart>.fullname" . }}; normalize the webhook resources back
+	@# to the fixed, release-agnostic names the distribution contract requires.
+	@sed -i 's|{{ include "dependencytrack-operator.fullname" . }}|deptrack-operator|g' $(CHART_DIR)/templates/certmanager-issuer.yaml $(CHART_DIR)/templates/certmanager-certificate.yaml $(CHART_DIR)/templates/webhook-validating-webhook.yaml $(CHART_DIR)/templates/webhook-service.yaml
+	@# Rename the ValidatingWebhookConfiguration to the contracted name the e2e
+	@# suite and cert-manager cainjector expect (deptrack-operator-validator),
+	@# overriding helmify's kubebuilder-default 'validating-webhook-configuration'.
+	@sed -i 's|name: deptrack-operator-validating-webhook-configuration|name: deptrack-operator-validator|g' $(CHART_DIR)/templates/webhook-validating-webhook.yaml
+	@# Point the VWC at the chart's webhook Service: kustomize namePrefix does not
+	@# rewrite clientConfig.service.name/namespace, so helmify ships the
+	@# kubebuilder defaults 'webhook-service'/'system'; normalize them.
+	@sed -i 's|      name: webhook-service|      name: deptrack-operator-webhook-service|g' $(CHART_DIR)/templates/webhook-validating-webhook.yaml
+	@sed -i 's|      namespace: system|      namespace: {{ .Release.Namespace }}|g' $(CHART_DIR)/templates/webhook-validating-webhook.yaml
+	@# Likewise normalize the webhook-server-cert volume in the deployment,
+	@# leaving the rest of the deployment parametric.
+	@sed -i 's|secretName: {{ include "dependencytrack-operator.fullname" . }}-webhook-server-cert|secretName: deptrack-operator-webhook-server-cert|g' $(CHART_DIR)/templates/deployment.yaml
+	@# Remove duplicate hardcoded selector/template labels that conflict with helpers.
 	@sed -i '/matchLabels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' $(CHART_DIR)/templates/deployment.yaml
 	@sed -i '/labels:/,/^    {{/{/app\.kubernetes\.io\/name: deptrack-operator/d}' $(CHART_DIR)/templates/deployment.yaml
-	@# Add imagePullPolicy support (helmify does not generate it)
+	@# Add imagePullPolicy support (helmify does not generate it).
 	@awk '/AppVersion/{print; print "        {{- if .Values.controllerManager.manager.image.pullPolicy }}"; print "        imagePullPolicy: {{ .Values.controllerManager.manager.image.pullPolicy }}"; print "        {{- end }}"; next}1' $(CHART_DIR)/templates/deployment.yaml > $(CHART_DIR)/templates/deployment.yaml.tmp && mv $(CHART_DIR)/templates/deployment.yaml.tmp $(CHART_DIR)/templates/deployment.yaml
+

@@ -27,23 +27,26 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestManagerWebhookCertMounted guards MEM023: the manager Deployment in the Helm
-// chart MUST mount the Team validating webhook serving cert at
+// TestManagerWebhookCertMounted guards MEM023: the manager Deployment in the
+// Helm chart MUST mount the Team validating webhook serving cert at
 // /tmp/k8s-webhook-server/serving-certs and reference the same Secret that the
-// webhook-server-cert template publishes. It also pins the kustomize source patch
-// that drives the mount, so a dropped mount, renamed secret, or unwired patch
-// regresses the build.
+// cert-manager Certificate publishes. It also pins the cert-manager
+// Certificate/Issuer pairing and the ValidatingWebhookConfiguration
+// inject-ca-from annotation, so a dropped mount, renamed secret, unaligned
+// Issuer, or value-driven caBundle regresses the build.
 func TestManagerWebhookCertMounted(t *testing.T) {
 	root := findProjectRoot(t)
 
 	const wantMountPath = "/tmp/k8s-webhook-server/serving-certs"
 
 	depPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "deployment.yaml")
-	certPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "webhook-server-cert.yaml")
+	certMgrCertPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "certmanager-certificate.yaml")
+	certMgrIssuerPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "certmanager-issuer.yaml")
+	whcPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "webhook-validating-webhook.yaml")
 	patchPath := filepath.Join(root, "config", "default", "webhook_server_cert_mount_patch.yaml")
 	kustPath := filepath.Join(root, "config", "default", "kustomization.yaml")
 
-	for _, p := range []string{depPath, certPath, patchPath, kustPath} {
+	for _, p := range []string{depPath, certMgrCertPath, certMgrIssuerPath, whcPath, patchPath, kustPath} {
 		if _, err := os.Stat(p); os.IsNotExist(err) {
 			t.Fatalf("missing expected file: %s", p)
 		}
@@ -128,13 +131,93 @@ func TestManagerWebhookCertMounted(t *testing.T) {
 		t.Errorf("webhook volume.secretName = %q, want to end with -webhook-server-cert", sn)
 	}
 
-	// Correlation: the published Secret shares the cert suffix the volume references.
+	// Correlation: the cert-manager Certificate must publish the SAME Secret the
+	// volume references, and pair with a self-signed Issuer.
 	var cert map[string]interface{}
-	if err := parseHelmYAML(certPath, &cert); err != nil {
-		t.Fatalf("failed to parse webhook-server-cert template: %v", err)
+	if err := parseHelmYAML(certMgrCertPath, &cert); err != nil {
+		t.Fatalf("failed to parse certmanager-certificate template: %v", err)
 	}
-	certName := strings.TrimSpace(getString(getNestedMap(cert, "metadata"), "name"))
+	certMeta := getNestedMap(cert, "metadata")
+	certName := strings.TrimSpace(getString(certMeta, "name"))
 	if !strings.HasSuffix(certName, "-webhook-server-cert") {
-		t.Errorf("webhook-server-cert Secret name = %q, want to end with -webhook-server-cert", certName)
+		t.Errorf("Certificate metadata.name = %q, want to end with -webhook-server-cert", certName)
+	}
+	certSpec := getNestedMap(cert, "spec")
+	if certSpec == nil {
+		t.Fatal("Certificate spec missing")
+	}
+	certSecretName := strings.TrimSpace(getString(certSpec, "secretName"))
+	if certSecretName != sn {
+		t.Errorf("Certificate secretName = %q, want the volume secretName %q", certSecretName, sn)
+	}
+	issuerRef := getNestedMap(certSpec, "issuerRef")
+	if issuerRef == nil {
+		t.Fatal("Certificate spec.issuerRef missing")
+	}
+	if got := getString(issuerRef, "kind"); got != "Issuer" {
+		t.Errorf("Certificate issuerRef.kind = %q, want Issuer", got)
+	}
+	issuerRefName := strings.TrimSpace(getString(issuerRef, "name"))
+	if !strings.HasSuffix(issuerRefName, "-self-signed-issuer") {
+		t.Errorf("Certificate issuerRef.name = %q, want to end with -self-signed-issuer", issuerRefName)
+	}
+
+	// The Issuer must exist and bear the name the Certificate references.
+	var issuer map[string]interface{}
+	if err := parseHelmYAML(certMgrIssuerPath, &issuer); err != nil {
+		t.Fatalf("failed to parse certmanager-issuer template: %v", err)
+	}
+	ispec := getNestedMap(issuer, "spec")
+	if ispec == nil {
+		t.Fatal("Issuer spec missing")
+	}
+	if getNestedMap(ispec, "selfSigned") == nil {
+		t.Error("Issuer spec.selfSigned missing; expected a self-signed Issuer")
+	}
+	issuerName := strings.TrimSpace(getString(getNestedMap(issuer, "metadata"), "name"))
+	if issuerName != issuerRefName {
+		t.Errorf("Issuer name = %q, want the Certificate issuerRef.name %q", issuerName, issuerRefName)
+	}
+
+	// The ValidatingWebhookConfiguration must delegate caBundle to cainjector
+	// (annotated) and must NOT carry a value-driven caBundle/fail block.
+	whcRaw, err := os.ReadFile(whcPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", whcPath, err)
+	}
+	whcS := stripHelmTemplates(string(whcRaw))
+	if !bytes.Contains([]byte(whcS), []byte("cert-manager.io/inject-ca-from")) {
+		t.Error("ValidatingWebhookConfiguration is missing the cert-manager.io/inject-ca-from annotation")
+	}
+	if !bytes.Contains([]byte(whcS), []byte("deptrack-operator-webhook-server-cert")) {
+		t.Error("ValidatingWebhookConfiguration inject-ca-from does not reference the cert-manager serving Secret")
+	}
+	if bytes.Contains([]byte(whcS), []byte("caBundle:")) {
+		t.Error("ValidatingWebhookConfiguration still embeds a value-driven caBundle block; expected cainjector injection only")
+	}
+
+	// Guard: the VWC clientConfig.service.name MUST resolve to the chart's
+	// webhook Service ('deptrack-operator-webhook-service'). A misspelled
+	// variant (e.g. 'deptract-...') leaves the Service unreferenced, so the
+	// API server returns 'service not found' on every validating webhook
+	// call and Team CR admission silently fails. Regression guard for MEM070.
+	if !bytes.Contains(whcRaw, []byte("name: deptrack-operator-webhook-service")) {
+		t.Error("ValidatingWebhookConfiguration clientConfig.service.name is not 'deptrack-operator-webhook-service'")
+	}
+	if !bytes.Contains(whcRaw, []byte("namespace: {{ .Release.Namespace }}")) {
+		t.Error("ValidatingWebhookConfiguration clientConfig.service.namespace is not '{{ .Release.Namespace }}'")
+	}
+
+	// Guard: the webhook Service must listen on port 443 — the default the
+	// VWC clientConfig.service.port falls back to when unspecified. A service
+	// on any other port without an explicit VWC port yields 'no service port
+	// 443 found' and silently breaks Team CR admission.
+	chartDir := filepath.Join(root, "deploy", "charts", "dependencytrack-operator")
+	valuesBytes, verr := os.ReadFile(filepath.Join(chartDir, "values.yaml"))
+	if verr != nil {
+		t.Fatalf("read values.yaml: %v", verr)
+	}
+	if !bytes.Contains(valuesBytes, []byte("port: 443")) {
+		t.Error("webhookService.ports must use port: 443 to match the VWC clientConfig default")
 	}
 }

@@ -1,0 +1,17 @@
+---
+# A self-signed Issuer bootstraps the CA keypair that signs the webhook serving
+# Certificate below. cert-manager owns issuance and rotation; the operator
+# consumes the CA transitively via the Certificate, never by materializing
+# private key material in values.
+#
+# Under config/default's namePrefix ("deptrack-operator-") this resource becomes
+# "deptrack-operator-self-signed-issuer", which the Certificate below references
+# via spec.issuerRef.name.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: self-signed-issuer
+  labels:
+    control-plane: controller-manager
+spec:
+  selfSigned: {}
