@@ -23,4 +23,8 @@ webhooks:
         namespace: {{ .Release.Namespace }}
         path: /validate-dependencytrack-mko-dev-v1alpha1-team
         port: 9443
-      caBundle: {{ .Files.Get "certs/webhook.pem" | b64enc }}
+      {{- if .Values.webhookCert.caBundle }}
+      caBundle: {{ .Values.webhookCert.caBundle }}
+      {{- else }}
+      {{- fail "webhookCert.caBundle must be set. Run hack/generate-webhook-certs.sh and pass the value." }}
+      {{- end }}

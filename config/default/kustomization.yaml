@@ -20,7 +20,10 @@ resources:
 - ../manager
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
 # crd/kustomization.yaml
-#- ../webhook
+- ../webhook
+# [WEBHOOK] Self-signed webhook TLS certificate (kustomize secretGenerator).
+# Certs are generated at build time by hack/generate-webhook-certs.sh.
+- ../certs
 # [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER'. 'WEBHOOK' components are required.
 #- ../certmanager
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
@@ -48,16 +51,16 @@ patches:
   target:
     kind: Deployment
 
+# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
+# crd/kustomization.yaml
+- path: manager_webhook_patch.yaml
+  target:
+    kind: Deployment
+
 # Uncomment the patches line if you enable Metrics and CertManager
 # [METRICS-WITH-CERTS] To enable metrics protected with certManager, uncomment the following line.
 # This patch will protect the metrics with certManager self-signed certs.
 #- path: cert_metrics_manager_patch.yaml
-#  target:
-#    kind: Deployment
-
-# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
-# crd/kustomization.yaml
-#- path: manager_webhook_patch.yaml
 #  target:
 #    kind: Deployment
 

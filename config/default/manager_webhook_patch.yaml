@@ -1,0 +1,14 @@
+# Expose webhook port 9443 and pass --webhook-cert-path to the manager container.
+# The controller-runtime webhook server listens on :9443 by default; when
+# --webhook-cert-path is set the operator reads the TLS certificate from the
+# mounted secret at that path rather than generating ephemeral self-signed
+# certs in memory.
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+- op: add
+  path: /spec/template/spec/containers/0/ports/-
+  value:
+    containerPort: 9443
+    protocol: TCP
+    name: webhook-server

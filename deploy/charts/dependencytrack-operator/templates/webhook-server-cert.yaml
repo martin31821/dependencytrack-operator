@@ -1,10 +1,9 @@
-{{- /* Self-signed serving certificate for the Team validating webhook.
+{{- /* Webhook serving certificate for the Team validating webhook.
 
-     NOTE: This is a DEV/E2E-only certificate (long TTL, shared keypair).
-     Production deployments should mint the serving cert via cert-manager
-     or a kubebuilder certgen init-job instead. The PEM is sourced from
-     certs/webhook.pem so the Secret and the ValidatingWebhookConfiguration
-     share a single source of truth. */ -}}
+     The certificate is provided via Helm values (webhookCert.tlsCrt and
+     webhookCert.tlsKey). Generate it with hack/generate-webhook-certs.sh
+     and pass the values at install time, or use cert-manager in production.
+     */ -}}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -14,5 +13,9 @@ metadata:
   {{- include "dependencytrack-operator.labels" . | nindent 4 }}
 type: kubernetes.io/tls
 data:
-  tls.crt: {{ .Files.Get "certs/webhook.pem" | b64enc }}
-  tls.key: {{ .Files.Get "certs/webhook.key" | b64enc }}
+  {{- if .Values.webhookCert.tlsCrt }}
+  tls.crt: {{ .Values.webhookCert.tlsCrt }}
+  tls.key: {{ .Values.webhookCert.tlsKey }}
+  {{- else }}
+  {{- fail "webhookCert.tlsCrt and webhookCert.tlsKey must be set. Run hack/generate-webhook-certs.sh and pass the values." }}
+  {{- end }}

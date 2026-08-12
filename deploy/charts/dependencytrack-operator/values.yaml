@@ -43,3 +43,12 @@ serviceAccount:
   automount: true
   create: true
   name: ""
+
+# Webhook TLS certificate (base64-encoded, no newlines).
+# Generate with hack/generate-webhook-certs.sh and pass at install time:
+#   helm install --set webhookCert.tlsCrt=$(base64 -w0 certs/tls.crt) --set webhookCert.tlsKey=$(base64 -w0 certs/tls.key) ...
+# For production, use cert-manager instead.
+webhookCert:
+  tlsCrt: ""
+  tlsKey: ""
+  caBundle: ""
