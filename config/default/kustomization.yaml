@@ -58,12 +58,37 @@ patches:
   target:
     kind: Deployment
 
+# [WEBHOOK] Kustomize does not rewrite service references inside admission
+# webhook configurations when namePrefix or namespace transforms the Service.
+# Source both fields from the final webhook Service metadata so every generated
+# distribution points the API server at the Service it actually creates.
+#
 # [CERTMANAGER] Delegate ValidatingWebhookConfiguration.caBundle population to
 # cert-manager's cainjector by annotating it with the serving Secret that the
 # Certificate (above) publishes. Sources namespace + secretName from the
 # Certificate so the built manifest agrees with the volume the manager mounts
 # (webhook-server-cert) and the Helm chart's inject-ca-from annotation.
 replacements:
+  - source:
+      kind: Service
+      version: v1
+      name: webhook-service
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: ValidatingWebhookConfiguration
+        fieldPaths:
+          - webhooks.0.clientConfig.service.name
+  - source:
+      kind: Service
+      version: v1
+      name: webhook-service
+      fieldPath: metadata.namespace
+    targets:
+      - select:
+          kind: ValidatingWebhookConfiguration
+        fieldPaths:
+          - webhooks.0.clientConfig.service.namespace
   - source:
       kind: Certificate
       group: cert-manager.io

@@ -37,16 +37,21 @@ import (
 func TestManagerWebhookCertMounted(t *testing.T) {
 	root := findProjectRoot(t)
 
-	const wantMountPath = "/tmp/k8s-webhook-server/serving-certs"
+	const (
+		wantMountPath              = "/tmp/k8s-webhook-server/serving-certs"
+		webhookServiceNameTemplate = `{{ include "dependencytrack-operator.fullname" . }}-webhook-service`
+		webhookSecretNameTemplate  = `{{ include "dependencytrack-operator.fullname" . }}-webhook-server-cert`
+	)
 
 	depPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "deployment.yaml")
 	certMgrCertPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "certmanager-certificate.yaml")
 	certMgrIssuerPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "certmanager-issuer.yaml")
+	webhookServicePath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "webhook-service.yaml")
 	whcPath := filepath.Join(root, "deploy", "charts", "dependencytrack-operator", "templates", "webhook-validating-webhook.yaml")
 	patchPath := filepath.Join(root, "config", "default", "webhook_server_cert_mount_patch.yaml")
 	kustPath := filepath.Join(root, "config", "default", "kustomization.yaml")
 
-	for _, p := range []string{depPath, certMgrCertPath, certMgrIssuerPath, whcPath, patchPath, kustPath} {
+	for _, p := range []string{depPath, certMgrCertPath, certMgrIssuerPath, webhookServicePath, whcPath, patchPath, kustPath} {
 		if _, err := os.Stat(p); os.IsNotExist(err) {
 			t.Fatalf("missing expected file: %s", p)
 		}
@@ -59,6 +64,14 @@ func TestManagerWebhookCertMounted(t *testing.T) {
 	}
 	if !bytes.Contains(ks, []byte("webhook_server_cert_mount_patch.yaml")) {
 		t.Error("config/default/kustomization.yaml does not wire webhook_server_cert_mount_patch.yaml")
+	}
+	for _, fieldPath := range []string{
+		"webhooks.0.clientConfig.service.name",
+		"webhooks.0.clientConfig.service.namespace",
+	} {
+		if !bytes.Contains(ks, []byte(fieldPath)) {
+			t.Errorf("config/default/kustomization.yaml does not source %s from the webhook Service", fieldPath)
+		}
 	}
 
 	// Parse the Helm deployment template. The image line straddles two template
@@ -189,23 +202,42 @@ func TestManagerWebhookCertMounted(t *testing.T) {
 	if !bytes.Contains([]byte(whcS), []byte("cert-manager.io/inject-ca-from")) {
 		t.Error("ValidatingWebhookConfiguration is missing the cert-manager.io/inject-ca-from annotation")
 	}
-	if !bytes.Contains([]byte(whcS), []byte("deptrack-operator-webhook-server-cert")) {
-		t.Error("ValidatingWebhookConfiguration inject-ca-from does not reference the cert-manager serving Secret")
+	if !bytes.Contains(whcRaw, []byte(webhookSecretNameTemplate)) {
+		t.Error("ValidatingWebhookConfiguration inject-ca-from does not use the templated cert-manager serving Secret")
 	}
 	if bytes.Contains([]byte(whcS), []byte("caBundle:")) {
 		t.Error("ValidatingWebhookConfiguration still embeds a value-driven caBundle block; expected cainjector injection only")
 	}
 
-	// Guard: the VWC clientConfig.service.name MUST resolve to the chart's
-	// webhook Service ('deptrack-operator-webhook-service'). A misspelled
-	// variant (e.g. 'deptract-...') leaves the Service unreferenced, so the
-	// API server returns 'service not found' on every validating webhook
-	// call and Team CR admission silently fails. Regression guard for MEM070.
-	if !bytes.Contains(whcRaw, []byte("name: deptrack-operator-webhook-service")) {
-		t.Error("ValidatingWebhookConfiguration clientConfig.service.name is not 'deptrack-operator-webhook-service'")
+	// Guard: the VWC clientConfig.service.name MUST use the same release-derived
+	// name as the chart's webhook Service. A literal or misspelled name leaves
+	// the Service unreferenced for non-default releases, so the API server returns
+	// "service not found" on every validating webhook call.
+	serviceRefPattern := regexp.MustCompile(`(?m)^\s+name:\s+['"]?` + regexp.QuoteMeta(webhookServiceNameTemplate) + `['"]?$`)
+	if !serviceRefPattern.Match(whcRaw) {
+		t.Error("ValidatingWebhookConfiguration clientConfig.service.name does not use the fullname template")
 	}
-	if !bytes.Contains(whcRaw, []byte("namespace: {{ .Release.Namespace }}")) {
+	serviceRaw, err := os.ReadFile(webhookServicePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", webhookServicePath, err)
+	}
+	if !bytes.Contains(serviceRaw, []byte("name: "+webhookServiceNameTemplate)) {
+		t.Error("webhook Service metadata.name does not use the fullname template")
+	}
+	namespaceRefPattern := regexp.MustCompile(`(?m)^\s+namespace:\s+['"]?\{\{ \.Release\.Namespace \}\}['"]?$`)
+	if !namespaceRefPattern.Match(whcRaw) {
 		t.Error("ValidatingWebhookConfiguration clientConfig.service.namespace is not '{{ .Release.Namespace }}'")
+	}
+
+	certRaw, err := os.ReadFile(certMgrCertPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", certMgrCertPath, err)
+	}
+	if got := bytes.Count(certRaw, []byte(webhookServiceNameTemplate)); got != 3 {
+		t.Errorf("Certificate has %d templated webhook DNS names, want 3", got)
+	}
+	if !bytes.Contains(certRaw, []byte("secretName: "+webhookSecretNameTemplate)) {
+		t.Error("Certificate spec.secretName does not use the fullname template")
 	}
 
 	// Guard: the webhook Service must listen on port 443 — the default the
