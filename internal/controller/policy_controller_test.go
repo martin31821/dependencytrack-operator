@@ -525,6 +525,46 @@ var _ = Describe("Policy Controller", func() {
 			Expect(dtCond.GetValue()).To(Equal("GPL-3.0-only"))
 			Expect(dtCond.GetViolationType()).To(BeEmpty())
 		})
+
+		It("should default the operator to MATCHES for EXPRESSION conditions without an operator", func() {
+			vt := dependencytrackv1alpha1.ViolationTypeSecurity
+			specCond := dependencytrackv1alpha1.PolicyCondition{
+				Subject:       dependencytrackv1alpha1.PolicyConditionSubjectExpression,
+				Value:         `component.purl.startsWith("pkg:npm/leftpad")`,
+				ViolationType: &vt,
+			}
+			dtCond := policyConditionToDT(specCond)
+			Expect(dtCond.GetSubject()).To(Equal("EXPRESSION"))
+			Expect(dtCond.GetOperator()).To(Equal("MATCHES"))
+			Expect(dtCond.GetValue()).To(HavePrefix(`component.purl`))
+			Expect(dtCond.GetViolationType()).To(Equal("SECURITY"))
+		})
+
+		It("should normalize any operator to MATCHES for EXPRESSION conditions", func() {
+			vt := dependencytrackv1alpha1.ViolationTypeOperational
+			specCond := dependencytrackv1alpha1.PolicyCondition{
+				Subject:       dependencytrackv1alpha1.PolicyConditionSubjectExpression,
+				Operator:      dependencytrackv1alpha1.PolicyConditionOperatorNoMatch,
+				Value:         `component.name == "foo"`,
+				ViolationType: &vt,
+			}
+			dtCond := policyConditionToDT(specCond)
+			Expect(dtCond.GetOperator()).To(Equal("MATCHES"))
+			Expect(dtCond.GetViolationType()).To(Equal("OPERATIONAL"))
+		})
+
+		It("should pass an explicit violation type through for non-expression conditions", func() {
+			vt := dependencytrackv1alpha1.ViolationTypeSecurity
+			specCond := dependencytrackv1alpha1.PolicyCondition{
+				Subject:       dependencytrackv1alpha1.PolicyConditionSubjectCWE,
+				Operator:      dependencytrackv1alpha1.PolicyConditionOperatorContainsAny,
+				Value:         "CWE-79, CWE-89",
+				ViolationType: &vt,
+			}
+			dtCond := policyConditionToDT(specCond)
+			Expect(dtCond.GetOperator()).To(Equal("CONTAINS_ANY"))
+			Expect(dtCond.GetViolationType()).To(Equal("SECURITY"))
+		})
 	})
 
 	Context("boolPtr helper", func() {

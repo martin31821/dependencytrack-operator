@@ -170,6 +170,34 @@ func TestPolicyConditionOperatorConstants(t *testing.T) {
 	assert.Equal(t, PolicyConditionOperator("IS_NOT"), PolicyConditionOperatorIsNot)
 }
 
+func TestViolationTypeConstants(t *testing.T) {
+	assert.Equal(t, ViolationType("LICENSE"), ViolationTypeLicense)
+	assert.Equal(t, ViolationType("OPERATIONAL"), ViolationTypeOperational)
+	assert.Equal(t, ViolationType("SECURITY"), ViolationTypeSecurity)
+}
+
+func TestPolicyConditionExpressionFields(t *testing.T) {
+	vt := ViolationTypeSecurity
+	// Expression conditions omit the operator and carry a CEL expression
+	// value plus an explicit violation type.
+	cond := PolicyCondition{
+		Subject:       PolicyConditionSubjectExpression,
+		Value:         `component.purl.startsWith("pkg:npm/leftpad")`,
+		ViolationType: &vt,
+	}
+	assert.Equal(t, PolicyConditionSubjectExpression, cond.Subject)
+	assert.Empty(t, cond.Operator)
+	assert.Equal(t, ViolationTypeSecurity, *cond.ViolationType)
+
+	// Non-expression conditions leave the violation type unset.
+	plain := PolicyCondition{
+		Subject:  PolicyConditionSubjectSeverity,
+		Operator: PolicyConditionOperatorIs,
+		Value:    "CRITICAL",
+	}
+	assert.Nil(t, plain.ViolationType)
+}
+
 func TestDeepCopyPolicy(t *testing.T) {
 	original := &Policy{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},

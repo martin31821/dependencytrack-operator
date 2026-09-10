@@ -29,7 +29,7 @@ The operator provides five CRDs in the `dependencytrack.mko.dev/v1alpha1` API gr
 Creates and manages a **Team** in DependencyTrack.
 
 | Field                       | Type               | Required | Description                                                                                                                                                                                                                                                                                                             |
-| --------------------------- | ------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-----------------------------|--------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `spec.name`                 | string             | No       | Human-readable team name                                                                                                                                                                                                                                                                                                |
 | `spec.permissions`          | []string           | No       | List of permission names to assign (omit to leave unchanged, empty array to clear all)                                                                                                                                                                                                                                  |
 | `spec.oidc`                 | object             | No       | Optional OIDC group-mapping configuration. A nil value disables OIDC management (zero API traffic). See [OpenID Connect (OIDC)](#openid-connect-oidc-group-to-team-mapping) below.                                                                                                                                      |
@@ -108,17 +108,18 @@ After reconciliation, the operator creates a `Secret` with the API key value. Th
 
 Creates and manages a global **Policy** and its conditions in DependencyTrack. The Kubernetes resource is namespaced, but DependencyTrack policies are global; policy names must therefore be unique across all namespaces managed by the operator.
 
-| Field                        | Type              | Required | Description                                                                                          |
-| ---------------------------- | ----------------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| `spec.name`                  | string            | Yes      | Human-readable policy name; must be globally unique in DependencyTrack                               |
-| `spec.operator`              | string            | Yes      | Condition matching mode: `ANY` if one condition must match, or `ALL` if every condition must match   |
-| `spec.violationState`        | string            | Yes      | Dependency-Track violation state: `INFO` (Inform), `WARN` (Warn), or `FAIL` (Fail)                   |
-| `spec.conditions`            | []PolicyCondition | Yes      | One or more inline conditions evaluated by DependencyTrack                                           |
-| `spec.conditions[].subject`  | string            | Yes      | Dependency-Track subject, such as `SEVERITY`, `LICENSE`, `CPE`, `PACKAGE_URL`, or `VULNERABILITY_ID` |
-| `spec.conditions[].operator` | string            | Yes      | Comparison operator: `IS` or `IS_NOT`                                                                |
-| `spec.conditions[].value`    | string            | Yes      | Value compared against the subject                                                                   |
-| `status.uuid`                | string            | —        | DependencyTrack UUID used as the authoritative remote identity                                       |
-| `status.conditions`          | []Condition       | —        | Reconciliation state                                                                                 |
+| Field                             | Type              | Required | Description                                                                                                             |
+|-----------------------------------|-------------------| -------- |-------------------------------------------------------------------------------------------------------------------------|
+| `spec.name`                       | string            | Yes      | Human-readable policy name; must be globally unique in DependencyTrack                                                  |
+| `spec.operator`                   | string            | Yes      | Condition matching mode: `ANY` if one condition must match, or `ALL` if every condition must match                      |
+| `spec.violationState`             | string            | Yes      | Dependency-Track violation state: `INFO` (Inform), `WARN` (Warn), or `FAIL` (Fail)                                      |
+| `spec.conditions`                 | []PolicyCondition | Yes      | One or more inline conditions evaluated by DependencyTrack                                                              |
+| `spec.conditions[].subject`       | string            | Yes      | Dependency-Track subject, such as `SEVERITY`, `LICENSE`, `CPE`, `PACKAGE_URL`, or `EXPRESSION`                          |
+| `spec.conditions[].operator`      | string            | No       | Comparison operator: `IS`, `IS_NOT`, `MATCHES`, `NUMERIC_*`, etc. Required except for `EXPRESSION`                      |
+| `spec.conditions[].value`         | string            | Yes      | Value compared against the subject; for `EXPRESSION` a CEL expression                                                   |
+| `spec.conditions[].violationType` | string            | No       | Violation class: `LICENSE`, `OPERATIONAL`, or `SECURITY`. Required for `EXPRESSION`; derived from the subject otherwise |
+| `status.uuid`                     | string            | —        | DependencyTrack UUID used as the authoritative remote identity                                                          |
+| `status.conditions`               | []Condition       | —        | Reconciliation state                                                                                                    |
 
 **Example:**
 
@@ -136,9 +137,14 @@ spec:
     - subject: SEVERITY
       operator: IS
       value: CRITICAL
+    - subject: EXPRESSION
+      violationType: SECURITY
+      value: component.purl.startsWith("pkg:npm/leftpad")
 ```
 
 The operator creates the policy first and then persists each inline condition through DependencyTrack's condition API. It records the remote UUID in `status.uuid`, uses that UUID for subsequent updates and deletion, and reports failures through the `Ready` status condition.
+
+> **Expression conditions:** the `EXPRESSION` subject evaluates a [CEL expression](https://dependencytrack.github.io/docs/next/reference/policies/condition-expressions/) against every component in scope. The `operator` field is not used (Dependency-Track stores the condition as `MATCHES`), and `violationType` must state the violation class the condition produces: `LICENSE`, `OPERATIONAL`, or `SECURITY`.
 
 > **Dependency-Track v5.0.2 compatibility:** condition subjects use Dependency-Track's native names. `CVSS` and suppression conditions are not supported; use a supported subject such as `SEVERITY`, `LICENSE`, `PACKAGE_URL`, or `VULNERABILITY_ID`.
 

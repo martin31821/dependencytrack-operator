@@ -321,11 +321,20 @@ func (r *PolicyReconciler) findDTCondition(
 	dtCond := policyConditionToDT(specCond)
 
 	for _, existing := range dtPolicy.GetPolicyConditions() {
-		if existing.GetOperator() == dtCond.GetOperator() &&
-			existing.GetSubject() == dtCond.GetSubject() &&
-			existing.GetValue() == dtCond.GetValue() {
-			return &existing, true, nil
+		if existing.GetOperator() != dtCond.GetOperator() ||
+			existing.GetSubject() != dtCond.GetSubject() ||
+			existing.GetValue() != dtCond.GetValue() {
+			continue
 		}
+		// For EXPRESSION conditions the stored violation type is part of the
+		// condition's identity; a change must force recreation so that drift
+		// converges. Other subjects derive their violation type from the
+		// subject and are matched without comparing it.
+		if specCond.Subject == dependencytrackv1alpha1.PolicyConditionSubjectExpression &&
+			(specCond.ViolationType == nil || existing.GetViolationType() != string(*specCond.ViolationType)) {
+			continue
+		}
+		return &existing, true, nil
 	}
 
 	return nil, false, nil
@@ -358,12 +367,26 @@ func (r *PolicyReconciler) createDTCondition(
 }
 
 // policyConditionToDT converts a K8s PolicyCondition spec to a DT PolicyCondition model.
+//
+// For the EXPRESSION subject the operator is normalized to MATCHES, mirroring
+// how Dependency-Track stores expression conditions, and the explicitly
+// chosen violation type is propagated. For every other subject the operator is
+// taken verbatim and the violation type (ignored server-side) is propagated
+// only when set.
 func policyConditionToDT(specCond dependencytrackv1alpha1.PolicyCondition) dtapi.PolicyCondition {
-	return dtapi.PolicyCondition{
-		Operator: string(specCond.Operator),
+	operator := specCond.Operator
+	if specCond.Subject == dependencytrackv1alpha1.PolicyConditionSubjectExpression {
+		operator = dependencytrackv1alpha1.PolicyConditionOperatorMatches
+	}
+	dtCond := dtapi.PolicyCondition{
+		Operator: string(operator),
 		Subject:  string(specCond.Subject),
 		Value:    specCond.Value,
 	}
+	if specCond.ViolationType != nil {
+		dtCond.SetViolationType(string(*specCond.ViolationType))
+	}
+	return dtCond
 }
 
 // boolPtr returns a pointer to the given bool.

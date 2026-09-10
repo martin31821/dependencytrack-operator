@@ -86,6 +86,128 @@ var _ = Describe("Policy API integration", func() {
 			}
 			Expect(k8sClient.Create(ctx, invalidPolicy)).Should(HaveOccurred())
 		})
+
+		It("rejects a Policy with an invalid ViolationType enum value", func() {
+			invalidVT := dependencytrackv1alpha1.ViolationType("NOOP")
+			invalidPolicy := &dependencytrackv1alpha1.Policy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "invalid-violation-type",
+					Namespace: testNS,
+				},
+				Spec: dependencytrackv1alpha1.PolicySpec{
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Bad Violation Type",
+					ViolationState: dependencytrackv1alpha1.ViolationStateFail,
+					Conditions: []dependencytrackv1alpha1.PolicyCondition{
+						{
+							Subject:       dependencytrackv1alpha1.PolicyConditionSubjectExpression,
+							Value:         `component.name == "foo"`,
+							ViolationType: &invalidVT,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, invalidPolicy)).Should(HaveOccurred())
+		})
+
+		It("rejects an EXPRESSION condition without a violationType", func() {
+			invalidPolicy := &dependencytrackv1alpha1.Policy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "expression-missing-violation-type",
+					Namespace: testNS,
+				},
+				Spec: dependencytrackv1alpha1.PolicySpec{
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Expression Without Violation Type",
+					ViolationState: dependencytrackv1alpha1.ViolationStateFail,
+					Conditions: []dependencytrackv1alpha1.PolicyCondition{
+						{
+							Subject: dependencytrackv1alpha1.PolicyConditionSubjectExpression,
+							Value:   `component.name == "foo"`,
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, invalidPolicy)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("violationType is required"))
+		})
+
+		It("rejects a non-EXPRESSION condition without an operator", func() {
+			invalidPolicy := &dependencytrackv1alpha1.Policy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "severity-missing-operator",
+					Namespace: testNS,
+				},
+				Spec: dependencytrackv1alpha1.PolicySpec{
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Severity Without Operator",
+					ViolationState: dependencytrackv1alpha1.ViolationStateFail,
+					Conditions: []dependencytrackv1alpha1.PolicyCondition{
+						{
+							Subject: dependencytrackv1alpha1.PolicyConditionSubjectSeverity,
+							Value:   "CRITICAL",
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, invalidPolicy)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("operator is required"))
+		})
+
+		It("accepts an EXPRESSION condition without an operator when a violationType is set", func() {
+			vt := dependencytrackv1alpha1.ViolationTypeSecurity
+			validPolicy := &dependencytrackv1alpha1.Policy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "expression-with-violation-type",
+					Namespace: testNS,
+				},
+				Spec: dependencytrackv1alpha1.PolicySpec{
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Expression With Violation Type",
+					ViolationState: dependencytrackv1alpha1.ViolationStateFail,
+					Conditions: []dependencytrackv1alpha1.PolicyCondition{
+						{
+							Subject:       dependencytrackv1alpha1.PolicyConditionSubjectExpression,
+							Value:         `component.purl.startsWith("pkg:npm/leftpad")`,
+							ViolationType: &vt,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, validPolicy)).Should(Succeed())
+			DeferCleanup(func() {
+				_ = k8sClient.Delete(ctx, validPolicy)
+			})
+		})
+
+		It("accepts an EXPRESSION condition with an explicit MATCHES operator", func() {
+			vt := dependencytrackv1alpha1.ViolationTypeOperational
+			validPolicy := &dependencytrackv1alpha1.Policy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "expression-with-matches-operator",
+					Namespace: testNS,
+				},
+				Spec: dependencytrackv1alpha1.PolicySpec{
+					Operator:       dependencytrackv1alpha1.PolicyOperatorAny,
+					Name:           "Expression With Matches Operator",
+					ViolationState: dependencytrackv1alpha1.ViolationStateWarn,
+					Conditions: []dependencytrackv1alpha1.PolicyCondition{
+						{
+							Subject:       dependencytrackv1alpha1.PolicyConditionSubjectExpression,
+							Operator:      dependencytrackv1alpha1.PolicyConditionOperatorMatches,
+							Value:         `component.name == "foo"`,
+							ViolationType: &vt,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, validPolicy)).Should(Succeed())
+			DeferCleanup(func() {
+				_ = k8sClient.Delete(ctx, validPolicy)
+			})
+		})
 	})
 
 	Context("Full reconcile cycle", func() {

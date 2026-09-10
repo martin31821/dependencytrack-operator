@@ -53,12 +53,19 @@ spec:
                   Conditions is the list of inline conditions that must be evaluated.
                   At least one condition must be provided.
                 items:
-                  description: PolicyCondition defines a single condition within a
-                    Policy.
+                  description: |-
+                    PolicyCondition defines a single condition within a Policy.
+
+                    The EXPRESSION subject is special: its Value is a CEL expression evaluated
+                    for every component in scope, its Operator is not used (Dependency-Track
+                    always records the condition as MATCHES), and its ViolationType must be
+                    chosen explicitly because the subject does not imply one.
                   properties:
                     operator:
-                      description: Operator specifies whether the subject is or is
-                        not the configured value.
+                      description: |-
+                        Operator specifies whether the subject is or is not the configured value.
+                        It is required for every subject except EXPRESSION, where Dependency-Track
+                        always evaluates the expression as a MATCHES comparison.
                       enum:
                       - IS
                       - IS_NOT
@@ -94,13 +101,31 @@ spec:
                       - EPSS
                       type: string
                     value:
-                      description: Value is the value compared against the subject.
+                      description: |-
+                        Value is the value compared against the subject.
+                        For the EXPRESSION subject, Value is a CEL expression that is evaluated
+                        for every component in scope; the condition matches when it is true.
+                      type: string
+                    violationType:
+                      description: |-
+                        ViolationType is the class of violation recorded when the condition
+                        matches. It is required for the EXPRESSION subject, which does not imply
+                        a violation type. For every other subject the violation type is derived
+                        from the subject and this field is ignored.
+                      enum:
+                      - LICENSE
+                      - OPERATIONAL
+                      - SECURITY
                       type: string
                   required:
-                  - operator
                   - subject
                   - value
                   type: object
+                  x-kubernetes-validations:
+                  - message: operator is required when subject is not EXPRESSION
+                    rule: self.subject == 'EXPRESSION' || has(self.operator)
+                  - message: violationType is required when subject is EXPRESSION
+                    rule: self.subject != 'EXPRESSION' || has(self.violationType)
                 minItems: 1
                 type: array
               name:

@@ -14,3 +14,8 @@ spec:
     - subject: SEVERITY
       operator: IS
       value: CRITICAL
+    # Expression conditions carry a CEL expression as value and must state
+    # the violation type they produce; the operator is not used.
+    - subject: EXPRESSION
+      violationType: SECURITY
+      value: component.purl.startsWith("pkg:npm/leftpad")

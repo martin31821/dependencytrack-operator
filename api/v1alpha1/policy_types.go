@@ -41,6 +41,17 @@ const (
 	PolicyOperatorAll PolicyOperator = "ALL"
 )
 
+// ViolationType defines the class of violation recorded when a condition matches.
+// Values match the Dependency-Track Policy API and UI directly.
+// +kubebuilder:validation:Enum=LICENSE;OPERATIONAL;SECURITY
+type ViolationType string
+
+const (
+	ViolationTypeLicense     ViolationType = "LICENSE"
+	ViolationTypeOperational ViolationType = "OPERATIONAL"
+	ViolationTypeSecurity    ViolationType = "SECURITY"
+)
+
 // PolicyConditionSubject defines the Dependency-Track subject evaluated by a condition.
 // +kubebuilder:validation:Enum=AGE;COORDINATES;CPE;EXPRESSION;LICENSE;LICENSE_GROUP;PACKAGE_URL;SEVERITY;SWID_TAGID;VERSION;COMPONENT_HASH;CWE;VULNERABILITY_ID;VERSION_DISTANCE;EPSS
 type PolicyConditionSubject string
@@ -84,18 +95,36 @@ const (
 )
 
 // PolicyCondition defines a single condition within a Policy.
+//
+// The EXPRESSION subject is special: its Value is a CEL expression evaluated
+// for every component in scope, its Operator is not used (Dependency-Track
+// always records the condition as MATCHES), and its ViolationType must be
+// chosen explicitly because the subject does not imply one.
+// +kubebuilder:validation:XValidation:rule="self.subject == 'EXPRESSION' || has(self.operator)",message="operator is required when subject is not EXPRESSION"
+// +kubebuilder:validation:XValidation:rule="self.subject != 'EXPRESSION' || has(self.violationType)",message="violationType is required when subject is EXPRESSION"
 type PolicyCondition struct {
 	// Subject specifies the Dependency-Track property to evaluate.
 	// +kubebuilder:validation:Required
 	Subject PolicyConditionSubject `json:"subject"`
 
 	// Operator specifies whether the subject is or is not the configured value.
-	// +kubebuilder:validation:Required
-	Operator PolicyConditionOperator `json:"operator"`
+	// It is required for every subject except EXPRESSION, where Dependency-Track
+	// always evaluates the expression as a MATCHES comparison.
+	// +optional
+	Operator PolicyConditionOperator `json:"operator,omitempty"`
 
 	// Value is the value compared against the subject.
+	// For the EXPRESSION subject, Value is a CEL expression that is evaluated
+	// for every component in scope; the condition matches when it is true.
 	// +kubebuilder:validation:Required
 	Value string `json:"value"`
+
+	// ViolationType is the class of violation recorded when the condition
+	// matches. It is required for the EXPRESSION subject, which does not imply
+	// a violation type. For every other subject the violation type is derived
+	// from the subject and this field is ignored.
+	// +optional
+	ViolationType *ViolationType `json:"violationType,omitempty"`
 }
 
 // PolicySpec defines the desired state of Policy.
