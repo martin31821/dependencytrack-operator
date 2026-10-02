@@ -498,14 +498,16 @@ func TestPolicyCRDSchemaIntegrity(t *testing.T) {
 		t.Errorf("conditions.minItems=%s, expected '1'", minItems)
 	}
 
-	// Verify conditions items have required fields
+	// Verify conditions items have the expected required fields.
+	// operator is optional because EXPRESSION conditions do not use one,
+	// and violationType is optional because only EXPRESSION conditions set it.
 	items := getNestedMap(conditionsProps, "items")
 	condRequired := getRequiredFields(items)
-	condExpected := []string{"subject", "operator", "value"}
-	if len(condRequired) != len(condExpected) {
-		t.Errorf("conditions[].required=%v, expected exactly %v", condRequired, condExpected)
+	condExpectedRequired := []string{"subject", "value"}
+	if len(condRequired) != len(condExpectedRequired) {
+		t.Errorf("conditions[].required=%v, expected exactly %v", condRequired, condExpectedRequired)
 	}
-	for _, expected := range condExpected {
+	for _, expected := range condExpectedRequired {
 		found := false
 		for _, rf := range condRequired {
 			if rf == expected {
@@ -519,9 +521,56 @@ func TestPolicyCRDSchemaIntegrity(t *testing.T) {
 	}
 
 	conditionProps := getNestedMap(items, "properties")
-	if len(conditionProps) != len(condExpected) {
-		t.Errorf("conditions[].properties=%v, expected exactly %v", conditionProps, condExpected)
+	condExpectedProps := []string{"subject", "operator", "value", "violationType"}
+	if len(conditionProps) != len(condExpectedProps) {
+		t.Errorf("conditions[].properties has %d entries %v, expected exactly %v", len(conditionProps), conditionProps, condExpectedProps)
 	}
+	for _, expected := range condExpectedProps {
+		if _, ok := conditionProps[expected]; !ok {
+			t.Errorf("conditions[].properties missing: %s", expected)
+		}
+	}
+
+	// Verify violationType enum matches the Dependency-Track violation classes.
+	violationTypeEnums := getStringSlice(getNestedMap(conditionProps, "violationType"), "enum")
+	expectedViolationTypes := []string{"LICENSE", "OPERATIONAL", "SECURITY"}
+	if len(violationTypeEnums) != len(expectedViolationTypes) {
+		t.Errorf("conditions[].violationType has %d values, expected %d: got %v", len(violationTypeEnums), len(expectedViolationTypes), violationTypeEnums)
+	}
+	for _, expected := range expectedViolationTypes {
+		found := false
+		for _, vt := range violationTypeEnums {
+			if vt == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("conditions[].violationType missing expected value: %s", expected)
+		}
+	}
+
+	// Verify the cross-field CEL validation rules are present.
+	validations, hasValidations := items["x-kubernetes-validations"]
+	if !hasValidations {
+		t.Error("conditions[] missing x-kubernetes-validations rules")
+	} else {
+		rules := toMapSlice(validations.([]interface{}))
+		if len(rules) != 2 {
+			t.Errorf("conditions[] has %d validation rules, expected 2", len(rules))
+		}
+		ruleSet := make(map[string]bool)
+		for _, rule := range rules {
+			ruleSet[getString(rule, "rule")] = true
+		}
+		if !ruleSet["self.subject == 'EXPRESSION' || has(self.operator)"] {
+			t.Error("conditions[] missing operator-required validation rule")
+		}
+		if !ruleSet["self.subject != 'EXPRESSION' || has(self.violationType)"] {
+			t.Error("conditions[] missing violationType-required validation rule")
+		}
+	}
+
 	conditionOperators := getStringSlice(getNestedMap(conditionProps, "operator"), "enum")
 	expectedOperators := []string{
 		"IS", "IS_NOT", "MATCHES", "NO_MATCH",
