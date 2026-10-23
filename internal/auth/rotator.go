@@ -21,12 +21,16 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"math"
+	"net/http"
 	"os"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -42,16 +46,31 @@ const (
 
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;create;update;patch
 
+// defaultRotationBackoff retries quickly at first (DependencyTrack or its TLS
+// certificate is often still coming up right after install) and settles at
+// one attempt every five minutes.
+var defaultRotationBackoff = wait.Backoff{
+	Duration: 5 * time.Second,
+	Factor:   2,
+	Jitter:   0.1,
+	Steps:    math.MaxInt32,
+	Cap:      5 * time.Minute,
+}
+
 // PasswordRotationRunnable checks and rotates the DependencyTrack admin
-// password stored in a Kubernetes Secret. It runs once per leader election.
-// When ClientProvider is set, the runnable invalidates its auth cache after
-// rotation so controllers immediately pick up the new credentials.
+// password stored in a Kubernetes Secret. It runs once per leader election and
+// retries with exponential backoff until the rotation succeeds or the context
+// is cancelled. When ClientProvider is set, the runnable invalidates its auth
+// cache after rotation so controllers immediately pick up the new credentials.
 type PasswordRotationRunnable struct {
 	Client    client.Client
 	Namespace string
 	// ClientProvider, if set, is invalidated after rotation so controllers
 	// re-authenticate with the new password on their next reconciliation.
 	ClientProvider dependencytrack.ClientProviderInterface
+	// Backoff controls the retry schedule for failed attempts. The zero value
+	// selects defaultRotationBackoff.
+	Backoff wait.Backoff
 }
 
 func (r *PasswordRotationRunnable) NeedLeaderElection() bool { return true }
@@ -66,16 +85,40 @@ func (r *PasswordRotationRunnable) Start(ctx context.Context) error {
 		return nil
 	}
 
+	backoff := r.Backoff
+	if backoff.Steps == 0 {
+		backoff = defaultRotationBackoff
+	}
+
+	for attempt := 1; ; attempt++ {
+		err := r.rotate(ctx, deptrackURL, secretName)
+		if err == nil {
+			return nil
+		}
+		delay := backoff.Step()
+		log.Error(err, "password rotation attempt failed, retrying", "attempt", attempt, "retryIn", delay.String())
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(delay):
+		}
+	}
+}
+
+// rotate performs one rotation attempt. It re-reads the Secret on every call,
+// so a retry resumes from whatever state the previous attempt left behind.
+// A non-nil error means the attempt should be retried.
+func (r *PasswordRotationRunnable) rotate(ctx context.Context, deptrackURL, secretName string) error {
+	log := logf.FromContext(ctx).WithName("password-rotation")
+
 	secret := &corev1.Secret{}
 	if err := r.Client.Get(ctx, types.NamespacedName{Namespace: r.Namespace, Name: secretName}, secret); err != nil {
 		if !errors.IsNotFound(err) {
-			log.Error(err, "failed to read credentials secret", "secret", secretName)
-			return nil
+			return fmt.Errorf("read credentials secret %s: %w", secretName, err)
 		}
 		log.Info("credentials secret not found, creating with default admin:admin")
 		if err := r.createDefaultSecret(ctx, secretName); err != nil {
-			log.Error(err, "failed to create credentials secret")
-			return nil
+			return err
 		}
 		// We just created the secret, so populate it directly instead of
 		// re-reading (the cache informer is not yet running at this point in
@@ -102,16 +145,24 @@ func (r *PasswordRotationRunnable) Start(ctx context.Context) error {
 	// Try the pending password against DependencyTrack first.
 	if pendingPassword != "" {
 		log.Info("detected in-progress rotation, attempting to resume")
-		if _, _, err := apiClient.UserAPI.ValidateCredentials(ctx).
+		_, resp, err := apiClient.UserAPI.ValidateCredentials(ctx).
 			Username(username).
 			Password(pendingPassword).
-			Execute(); err == nil {
+			Execute()
+		if err == nil {
 			log.Info("DependencyTrack already accepted the new password, finalizing secret")
 			if err := r.finalizeSecret(ctx, secret, pendingPassword); err != nil {
 				return err
 			}
 			r.invalidateProvider()
 			return nil
+		}
+		// Only an explicit rejection proves the pending password was never
+		// applied. On any other failure (TLS, network, 5xx) DependencyTrack may
+		// already hold it, and overwriting password-new would lose the only
+		// valid credential, so retry the check instead.
+		if resp == nil || resp.StatusCode != http.StatusUnauthorized {
+			return fmt.Errorf("check pending password against DependencyTrack: %w", err)
 		}
 		log.Info("new password not yet applied to DependencyTrack, retrying rotation")
 		// Fall through and rotate again using the original password.
@@ -126,17 +177,18 @@ func (r *PasswordRotationRunnable) Start(ctx context.Context) error {
 
 	newPassword, err := generatePassword()
 	if err != nil {
-		log.Error(err, "failed to generate new password")
-		return nil
+		return fmt.Errorf("generate new password: %w", err)
 	}
 
 	// Step A: persist the new password as a temporary key so we can recover if
 	// the operator crashes before finishing.
 	patch := secret.DeepCopy()
+	if patch.Data == nil {
+		patch.Data = map[string][]byte{}
+	}
 	patch.Data[secretKeyPasswordNew] = []byte(newPassword)
 	if err := r.Client.Patch(ctx, patch, client.MergeFrom(secret)); err != nil {
-		log.Error(err, "failed to store pending password in secret")
-		return nil
+		return fmt.Errorf("store pending password in secret: %w", err)
 	}
 	secret = patch
 
@@ -147,8 +199,7 @@ func (r *PasswordRotationRunnable) Start(ctx context.Context) error {
 		NewPassword(newPassword).
 		ConfirmPassword(newPassword).
 		Execute(); err != nil {
-		log.Error(err, "failed to update password in DependencyTrack; secret retains password-new for recovery")
-		return nil
+		return fmt.Errorf("update password in DependencyTrack (secret retains password-new for recovery): %w", err)
 	}
 
 	// Step C: promote the new password to the main key and remove the temp key.
@@ -166,8 +217,7 @@ func (r *PasswordRotationRunnable) finalizeSecret(ctx context.Context, secret *c
 	patch.Data[secretKeyPassword] = []byte(newPassword)
 	delete(patch.Data, secretKeyPasswordNew)
 	if err := r.Client.Patch(ctx, patch, client.MergeFrom(secret)); err != nil {
-		log.Error(err, "failed to finalize secret after password rotation")
-		return nil
+		return fmt.Errorf("finalize secret after password rotation: %w", err)
 	}
 
 	log.Info("password rotation completed successfully")
