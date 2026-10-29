@@ -249,7 +249,6 @@ func (o *JsonSchemaValidationError) UnmarshalJSON(data []byte) (err error) {
 	varJsonSchemaValidationError := _JsonSchemaValidationError{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varJsonSchemaValidationError)
 
 	if err != nil {

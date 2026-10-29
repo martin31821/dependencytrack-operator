@@ -240,7 +240,6 @@ func (o *ProblemDetails) UnmarshalJSON(data []byte) (err error) {
 	varProblemDetails := _ProblemDetails{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varProblemDetails)
 
 	if err != nil {

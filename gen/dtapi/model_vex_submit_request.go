@@ -191,7 +191,6 @@ func (o *VexSubmitRequest) UnmarshalJSON(data []byte) (err error) {
 	varVexSubmitRequest := _VexSubmitRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varVexSubmitRequest)
 
 	if err != nil {

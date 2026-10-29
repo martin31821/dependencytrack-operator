@@ -137,7 +137,6 @@ func (o *TaggedPolicyListResponseItem) UnmarshalJSON(data []byte) (err error) {
 	varTaggedPolicyListResponseItem := _TaggedPolicyListResponseItem{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varTaggedPolicyListResponseItem)
 
 	if err != nil {

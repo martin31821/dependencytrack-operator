@@ -171,7 +171,6 @@ func (o *Parent) UnmarshalJSON(data []byte) (err error) {
 	varParent := _Parent{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varParent)
 
 	if err != nil {

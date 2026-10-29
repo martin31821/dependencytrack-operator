@@ -460,7 +460,6 @@ func (o *ManagedUser) UnmarshalJSON(data []byte) (err error) {
 	varManagedUser := _ManagedUser{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varManagedUser)
 
 	if err != nil {

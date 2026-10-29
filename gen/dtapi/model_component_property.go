@@ -271,7 +271,6 @@ func (o *ComponentProperty) UnmarshalJSON(data []byte) (err error) {
 	varComponentProperty := _ComponentProperty{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varComponentProperty)
 
 	if err != nil {

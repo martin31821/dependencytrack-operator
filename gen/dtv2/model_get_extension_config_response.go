@@ -108,7 +108,6 @@ func (o *GetExtensionConfigResponse) UnmarshalJSON(data []byte) (err error) {
 	varGetExtensionConfigResponse := _GetExtensionConfigResponse{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varGetExtensionConfigResponse)
 
 	if err != nil {

@@ -1811,7 +1811,6 @@ func (o *Component) UnmarshalJSON(data []byte) (err error) {
 	varComponent := _Component{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varComponent)
 
 	if err != nil {

@@ -703,7 +703,6 @@ func (o *ServiceComponent) UnmarshalJSON(data []byte) (err error) {
 	varServiceComponent := _ServiceComponent{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varServiceComponent)
 
 	if err != nil {

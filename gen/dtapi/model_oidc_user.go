@@ -179,7 +179,6 @@ func (o *OidcUser) UnmarshalJSON(data []byte) (err error) {
 	varOidcUser := _OidcUser{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varOidcUser)
 
 	if err != nil {

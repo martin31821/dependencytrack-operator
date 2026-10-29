@@ -143,7 +143,6 @@ func (o *MappedOidcGroup) UnmarshalJSON(data []byte) (err error) {
 	varMappedOidcGroup := _MappedOidcGroup{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varMappedOidcGroup)
 
 	if err != nil {

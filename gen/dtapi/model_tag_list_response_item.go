@@ -253,7 +253,6 @@ func (o *TagListResponseItem) UnmarshalJSON(data []byte) (err error) {
 	varTagListResponseItem := _TagListResponseItem{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varTagListResponseItem)
 
 	if err != nil {

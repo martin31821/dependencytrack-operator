@@ -215,7 +215,6 @@ func (o *ViolationAnalysis) UnmarshalJSON(data []byte) (err error) {
 	varViolationAnalysis := _ViolationAnalysis{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varViolationAnalysis)
 
 	if err != nil {

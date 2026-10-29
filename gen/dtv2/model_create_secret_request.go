@@ -172,7 +172,6 @@ func (o *CreateSecretRequest) UnmarshalJSON(data []byte) (err error) {
 	varCreateSecretRequest := _CreateSecretRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varCreateSecretRequest)
 
 	if err != nil {

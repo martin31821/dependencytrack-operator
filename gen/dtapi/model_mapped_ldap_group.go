@@ -135,7 +135,6 @@ func (o *MappedLdapGroup) UnmarshalJSON(data []byte) (err error) {
 	varMappedLdapGroup := _MappedLdapGroup{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varMappedLdapGroup)
 
 	if err != nil {

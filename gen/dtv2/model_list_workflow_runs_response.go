@@ -111,7 +111,6 @@ func (o *ListWorkflowRunsResponse) UnmarshalJSON(data []byte) (err error) {
 	varListWorkflowRunsResponse := _ListWorkflowRunsResponse{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varListWorkflowRunsResponse)
 
 	if err != nil {

@@ -183,7 +183,6 @@ func (o *ConstraintViolationError) UnmarshalJSON(data []byte) (err error) {
 	varConstraintViolationError := _ConstraintViolationError{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varConstraintViolationError)
 
 	if err != nil {

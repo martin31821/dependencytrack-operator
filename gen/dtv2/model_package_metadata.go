@@ -205,7 +205,6 @@ func (o *PackageMetadata) UnmarshalJSON(data []byte) (err error) {
 	varPackageMetadata := _PackageMetadata{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varPackageMetadata)
 
 	if err != nil {

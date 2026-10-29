@@ -135,7 +135,6 @@ func (o *TeamsSetRequest) UnmarshalJSON(data []byte) (err error) {
 	varTeamsSetRequest := _TeamsSetRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varTeamsSetRequest)
 
 	if err != nil {

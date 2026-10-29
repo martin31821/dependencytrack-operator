@@ -1217,7 +1217,6 @@ func (o *PortfolioMetrics) UnmarshalJSON(data []byte) (err error) {
 	varPortfolioMetrics := _PortfolioMetrics{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varPortfolioMetrics)
 
 	if err != nil {

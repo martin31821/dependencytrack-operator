@@ -115,7 +115,6 @@ func (o *InvalidVulnPolicyConditionProblemDetails) UnmarshalJSON(data []byte) (e
 	varInvalidVulnPolicyConditionProblemDetails := _InvalidVulnPolicyConditionProblemDetails{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varInvalidVulnPolicyConditionProblemDetails)
 
 	if err != nil {

@@ -532,7 +532,6 @@ func (o *WorkflowRunMetadata) UnmarshalJSON(data []byte) (err error) {
 	varWorkflowRunMetadata := _WorkflowRunMetadata{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varWorkflowRunMetadata)
 
 	if err != nil {

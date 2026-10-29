@@ -107,7 +107,6 @@ func (o *IsTokenBeingProcessedResponse) UnmarshalJSON(data []byte) (err error) {
 	varIsTokenBeingProcessedResponse := _IsTokenBeingProcessedResponse{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varIsTokenBeingProcessedResponse)
 
 	if err != nil {

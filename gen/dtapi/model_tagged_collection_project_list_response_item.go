@@ -174,7 +174,6 @@ func (o *TaggedCollectionProjectListResponseItem) UnmarshalJSON(data []byte) (er
 	varTaggedCollectionProjectListResponseItem := _TaggedCollectionProjectListResponseItem{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varTaggedCollectionProjectListResponseItem)
 
 	if err != nil {

@@ -153,7 +153,6 @@ func (o *InvalidSortFieldProblemDetails) UnmarshalJSON(data []byte) (err error) 
 	varInvalidSortFieldProblemDetails := _InvalidSortFieldProblemDetails{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varInvalidSortFieldProblemDetails)
 
 	if err != nil {

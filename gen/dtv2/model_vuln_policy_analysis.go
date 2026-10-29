@@ -256,7 +256,6 @@ func (o *VulnPolicyAnalysis) UnmarshalJSON(data []byte) (err error) {
 	varVulnPolicyAnalysis := _VulnPolicyAnalysis{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varVulnPolicyAnalysis)
 
 	if err != nil {

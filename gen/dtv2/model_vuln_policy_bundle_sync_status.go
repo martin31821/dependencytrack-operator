@@ -220,7 +220,6 @@ func (o *VulnPolicyBundleSyncStatus) UnmarshalJSON(data []byte) (err error) {
 	varVulnPolicyBundleSyncStatus := _VulnPolicyBundleSyncStatus{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varVulnPolicyBundleSyncStatus)
 
 	if err != nil {

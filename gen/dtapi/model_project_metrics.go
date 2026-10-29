@@ -1145,7 +1145,6 @@ func (o *ProjectMetrics) UnmarshalJSON(data []byte) (err error) {
 	varProjectMetrics := _ProjectMetrics{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varProjectMetrics)
 
 	if err != nil {

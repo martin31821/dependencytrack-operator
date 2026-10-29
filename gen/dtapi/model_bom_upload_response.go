@@ -137,7 +137,6 @@ func (o *BomUploadResponse) UnmarshalJSON(data []byte) (err error) {
 	varBomUploadResponse := _BomUploadResponse{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varBomUploadResponse)
 
 	if err != nil {

@@ -514,7 +514,6 @@ func (o *ConciseProjectMetrics) UnmarshalJSON(data []byte) (err error) {
 	varConciseProjectMetrics := _ConciseProjectMetrics{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varConciseProjectMetrics)
 
 	if err != nil {

@@ -215,7 +215,6 @@ func (o *LdapUser) UnmarshalJSON(data []byte) (err error) {
 	varLdapUser := _LdapUser{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varLdapUser)
 
 	if err != nil {

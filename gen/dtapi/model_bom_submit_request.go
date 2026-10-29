@@ -408,7 +408,6 @@ func (o *BomSubmitRequest) UnmarshalJSON(data []byte) (err error) {
 	varBomSubmitRequest := _BomSubmitRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varBomSubmitRequest)
 
 	if err != nil {

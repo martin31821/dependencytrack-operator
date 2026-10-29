@@ -111,7 +111,6 @@ func (o *ListTaskQueuesResponse) UnmarshalJSON(data []byte) (err error) {
 	varListTaskQueuesResponse := _ListTaskQueuesResponse{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varListTaskQueuesResponse)
 
 	if err != nil {

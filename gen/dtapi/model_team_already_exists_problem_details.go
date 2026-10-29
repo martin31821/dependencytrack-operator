@@ -314,7 +314,6 @@ func (o *TeamAlreadyExistsProblemDetails) UnmarshalJSON(data []byte) (err error)
 	varTeamAlreadyExistsProblemDetails := _TeamAlreadyExistsProblemDetails{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varTeamAlreadyExistsProblemDetails)
 
 	if err != nil {

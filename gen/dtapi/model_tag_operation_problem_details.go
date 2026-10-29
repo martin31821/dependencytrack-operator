@@ -277,7 +277,6 @@ func (o *TagOperationProblemDetails) UnmarshalJSON(data []byte) (err error) {
 	varTagOperationProblemDetails := _TagOperationProblemDetails{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varTagOperationProblemDetails)
 
 	if err != nil {

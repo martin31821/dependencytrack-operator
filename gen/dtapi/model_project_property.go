@@ -235,7 +235,6 @@ func (o *ProjectProperty) UnmarshalJSON(data []byte) (err error) {
 	varProjectProperty := _ProjectProperty{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varProjectProperty)
 
 	if err != nil {

@@ -523,7 +523,6 @@ func (o *UpdateNotificationRuleRequest) UnmarshalJSON(data []byte) (err error) {
 	varUpdateNotificationRuleRequest := _UpdateNotificationRuleRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varUpdateNotificationRuleRequest)
 
 	if err != nil {

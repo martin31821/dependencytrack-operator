@@ -173,7 +173,6 @@ func (o *AffectedVersionAttribution) UnmarshalJSON(data []byte) (err error) {
 	varAffectedVersionAttribution := _AffectedVersionAttribution{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varAffectedVersionAttribution)
 
 	if err != nil {

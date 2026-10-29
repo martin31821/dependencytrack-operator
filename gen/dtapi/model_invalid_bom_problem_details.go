@@ -277,7 +277,6 @@ func (o *InvalidBomProblemDetails) UnmarshalJSON(data []byte) (err error) {
 	varInvalidBomProblemDetails := _InvalidBomProblemDetails{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varInvalidBomProblemDetails)
 
 	if err != nil {

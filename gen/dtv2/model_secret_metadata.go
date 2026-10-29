@@ -218,7 +218,6 @@ func (o *SecretMetadata) UnmarshalJSON(data []byte) (err error) {
 	varSecretMetadata := _SecretMetadata{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varSecretMetadata)
 
 	if err != nil {

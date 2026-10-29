@@ -771,7 +771,6 @@ func (o *NotificationRule) UnmarshalJSON(data []byte) (err error) {
 	varNotificationRule := _NotificationRule{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varNotificationRule)
 
 	if err != nil {

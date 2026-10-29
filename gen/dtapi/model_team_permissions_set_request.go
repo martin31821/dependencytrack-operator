@@ -135,7 +135,6 @@ func (o *TeamPermissionsSetRequest) UnmarshalJSON(data []byte) (err error) {
 	varTeamPermissionsSetRequest := _TeamPermissionsSetRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varTeamPermissionsSetRequest)
 
 	if err != nil {

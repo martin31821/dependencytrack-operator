@@ -243,7 +243,6 @@ func (o *CreateNotificationPublisherRequest) UnmarshalJSON(data []byte) (err err
 	varCreateNotificationPublisherRequest := _CreateNotificationPublisherRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varCreateNotificationPublisherRequest)
 
 	if err != nil {

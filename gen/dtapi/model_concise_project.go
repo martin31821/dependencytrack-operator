@@ -601,7 +601,6 @@ func (o *ConciseProject) UnmarshalJSON(data []byte) (err error) {
 	varConciseProject := _ConciseProject{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varConciseProject)
 
 	if err != nil {

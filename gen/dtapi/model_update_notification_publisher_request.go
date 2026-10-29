@@ -271,7 +271,6 @@ func (o *UpdateNotificationPublisherRequest) UnmarshalJSON(data []byte) (err err
 	varUpdateNotificationPublisherRequest := _UpdateNotificationPublisherRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varUpdateNotificationPublisherRequest)
 
 	if err != nil {

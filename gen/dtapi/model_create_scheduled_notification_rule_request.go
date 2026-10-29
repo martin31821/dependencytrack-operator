@@ -191,7 +191,6 @@ func (o *CreateScheduledNotificationRuleRequest) UnmarshalJSON(data []byte) (err
 	varCreateScheduledNotificationRuleRequest := _CreateScheduledNotificationRuleRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varCreateScheduledNotificationRuleRequest)
 
 	if err != nil {

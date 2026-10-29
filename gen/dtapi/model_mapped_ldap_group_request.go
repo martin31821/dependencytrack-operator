@@ -135,7 +135,6 @@ func (o *MappedLdapGroupRequest) UnmarshalJSON(data []byte) (err error) {
 	varMappedLdapGroupRequest := _MappedLdapGroupRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varMappedLdapGroupRequest)
 
 	if err != nil {

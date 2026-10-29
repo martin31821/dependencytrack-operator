@@ -820,7 +820,6 @@ func (o *ListComponentsResponseItem) UnmarshalJSON(data []byte) (err error) {
 	varListComponentsResponseItem := _ListComponentsResponseItem{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varListComponentsResponseItem)
 
 	if err != nil {

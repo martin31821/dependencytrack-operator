@@ -115,7 +115,6 @@ func (o *InvalidRequestProblemDetails) UnmarshalJSON(data []byte) (err error) {
 	varInvalidRequestProblemDetails := _InvalidRequestProblemDetails{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varInvalidRequestProblemDetails)
 
 	if err != nil {

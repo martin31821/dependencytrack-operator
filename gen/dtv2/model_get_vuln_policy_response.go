@@ -532,7 +532,6 @@ func (o *GetVulnPolicyResponse) UnmarshalJSON(data []byte) (err error) {
 	varGetVulnPolicyResponse := _GetVulnPolicyResponse{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varGetVulnPolicyResponse)
 
 	if err != nil {

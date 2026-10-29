@@ -145,7 +145,6 @@ func (o *PaginatedResponse) UnmarshalJSON(data []byte) (err error) {
 	varPaginatedResponse := _PaginatedResponse{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varPaginatedResponse)
 
 	if err != nil {

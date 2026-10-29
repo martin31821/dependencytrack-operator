@@ -135,7 +135,6 @@ func (o *AclMappingRequest) UnmarshalJSON(data []byte) (err error) {
 	varAclMappingRequest := _AclMappingRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varAclMappingRequest)
 
 	if err != nil {

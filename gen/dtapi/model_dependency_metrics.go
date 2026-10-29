@@ -1073,7 +1073,6 @@ func (o *DependencyMetrics) UnmarshalJSON(data []byte) (err error) {
 	varDependencyMetrics := _DependencyMetrics{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varDependencyMetrics)
 
 	if err != nil {

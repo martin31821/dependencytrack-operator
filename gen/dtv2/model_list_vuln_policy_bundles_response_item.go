@@ -283,7 +283,6 @@ func (o *ListVulnPolicyBundlesResponseItem) UnmarshalJSON(data []byte) (err erro
 	varListVulnPolicyBundlesResponseItem := _ListVulnPolicyBundlesResponseItem{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varListVulnPolicyBundlesResponseItem)
 
 	if err != nil {

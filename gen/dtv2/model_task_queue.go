@@ -258,7 +258,6 @@ func (o *TaskQueue) UnmarshalJSON(data []byte) (err error) {
 	varTaskQueue := _TaskQueue{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varTaskQueue)
 
 	if err != nil {

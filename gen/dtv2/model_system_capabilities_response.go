@@ -109,7 +109,6 @@ func (o *SystemCapabilitiesResponse) UnmarshalJSON(data []byte) (err error) {
 	varSystemCapabilitiesResponse := _SystemCapabilitiesResponse{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varSystemCapabilitiesResponse)
 
 	if err != nil {

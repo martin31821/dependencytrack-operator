@@ -111,7 +111,6 @@ func (o *ListExtensionPointsResponse) UnmarshalJSON(data []byte) (err error) {
 	varListExtensionPointsResponse := _ListExtensionPointsResponse{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varListExtensionPointsResponse)
 
 	if err != nil {

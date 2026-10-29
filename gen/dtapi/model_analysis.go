@@ -587,7 +587,6 @@ func (o *Analysis) UnmarshalJSON(data []byte) (err error) {
 	varAnalysis := _Analysis{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varAnalysis)
 
 	if err != nil {

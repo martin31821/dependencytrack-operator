@@ -135,7 +135,6 @@ func (o *OidcGroup) UnmarshalJSON(data []byte) (err error) {
 	varOidcGroup := _OidcGroup{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varOidcGroup)
 
 	if err != nil {

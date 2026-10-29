@@ -277,7 +277,6 @@ func (o *InvalidNotificationFilterExpressionProblemDetails) UnmarshalJSON(data [
 	varInvalidNotificationFilterExpressionProblemDetails := _InvalidNotificationFilterExpressionProblemDetails{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varInvalidNotificationFilterExpressionProblemDetails)
 
 	if err != nil {

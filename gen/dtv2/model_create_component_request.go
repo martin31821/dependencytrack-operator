@@ -820,7 +820,6 @@ func (o *CreateComponentRequest) UnmarshalJSON(data []byte) (err error) {
 	varCreateComponentRequest := _CreateComponentRequest{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varCreateComponentRequest)
 
 	if err != nil {

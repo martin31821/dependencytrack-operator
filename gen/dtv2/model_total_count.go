@@ -137,7 +137,6 @@ func (o *TotalCount) UnmarshalJSON(data []byte) (err error) {
 	varTotalCount := _TotalCount{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varTotalCount)
 
 	if err != nil {

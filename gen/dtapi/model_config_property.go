@@ -235,7 +235,6 @@ func (o *ConfigProperty) UnmarshalJSON(data []byte) (err error) {
 	varConfigProperty := _ConfigProperty{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varConfigProperty)
 
 	if err != nil {
